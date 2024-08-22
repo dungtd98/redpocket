@@ -1,10 +1,11 @@
 import decimal
-from .models import Wallet, GiveawayPouch
+from .models import Wallet, GiveawayPouch, UserStake, Task
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 User = get_user_model()
 
 class WalletSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username')
     class Meta:
         model = Wallet
         fields = '__all__'
@@ -26,4 +27,12 @@ class GiveawayPouchSerializer(serializers.ModelSerializer):
         
         return value
 
-    
+class UserStakeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserStake
+        fields = '__all__'
+
+class TaskSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Task
+        fields = '__all__'
