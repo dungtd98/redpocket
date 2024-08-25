@@ -100,57 +100,44 @@ class TelegramAuthAPIView(APIView):
             }
             return Response(response_data, status=status.HTTP_200_OK, content_type='application/json')
         return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+import hashlib
+import hmac
+import time
+class TelegramLoginAPIView(APIView):
+    def post(self, request):
+        data = request.data
+        TELEGRAM_BOT_TOKEN = '5899297704:AAEaS1T9NJ64Q0nQ-uEf3-XEmvJeTLAtgeg'
+        secret_key = hashlib.sha256(TELEGRAM_BOT_TOKEN.encode()).digest()
 
-# class TelegramAuthAPIView(APIView):
+        auth_date = data.get('auth_date')
+        hash_telegram = data.get('hash')
 
-#     def get(self, request):
-#         serializer = TelegramAuthSerializer(data=request.GET)
-#         if serializer.is_valid():
-#             user, created = User.objects.get_or_create(
-#                 username=serializer.validated_data['username'],
-#                 defaults={
-#                     'first_name': serializer.validated_data['first_name'],
-#                     'last_name': serializer.validated_data['last_name'],
-#                 }
-#             )
-#             refresh = RefreshToken.for_user(user)
-#             return Response({
-#                 'access': str(refresh.access_token),
-#                 'refresh': str(refresh),
-#             })
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-# class TelegramAuthAPIView(APIView):
+        check_string = '\n'.join([f"{k}={v}" for k, v in sorted(data.items()) if k != 'hash'])
 
-#     def get(self, request):
-#         serializer = TelegramAuthSerializer(data=request.GET)
-#         if serializer.is_valid():
-#             user, created = User.objects.get_or_create(
-#                 username=serializer.validated_data['username'],
-#                 defaults={
-#                     'first_name': serializer.validated_data['first_name'],
-#                     'last_name': serializer.validated_data['last_name'],
-#                 }
-#             )
-#             refresh = RefreshToken.for_user(user)
-#             response_data = {
-#                 'data': {
-#                     'token': {
-#                         'access': str(refresh.access_token),
-#                         'refresh': str(refresh),
-#                     },
-#                     'user': {
-#                         'id': user.id,
-#                         'username': user.username,
-#                         'first_name': user.first_name,
-#                         'last_name': user.last_name,
-#                         "wallet": user.wallet,
-#                         # Thêm các trường khác nếu cần
-#                     }
-#                 },
-#                 'status': 200
-#             }
-#             return Response(response_data, status=status.HTTP_200_OK)
-#         return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        hash_check = hmac.new(secret_key, check_string.encode(), hashlib.sha256).hexdigest()
+
+        if hash_check != hash_telegram:
+            return Response({'detail': 'Invalid data received from Telegram.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if time.time() - int(auth_date) > 86400:
+            return Response({'detail': 'Authentication data is too old.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user_id = data.get('user')['id']
+        first_name = data.get('user')['first_name']
+        last_name = data.get('user')['last_name']
+        username = data.get('user')['username']
+
+        user, created = User.objects.get_or_create(username=username, defaults={
+            'first_name': first_name,
+            'last_name': last_name,
+            'password': User.objects.make_random_password()
+        })
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+        })
 from django.shortcuts import render
 
 def index(request):
