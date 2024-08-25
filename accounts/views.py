@@ -103,7 +103,7 @@ class TelegramAuthAPIView(APIView):
 import hashlib
 import hmac
 import time
-class TelegramAuthAPIView(APIView):
+class TelegramLoginAPIView(APIView):
     def post(self, request, *args, **kwargs):
         # Nhận dữ liệu từ request
         init_data = request.data.get('initData')
