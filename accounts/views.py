@@ -103,41 +103,44 @@ class TelegramAuthAPIView(APIView):
 import hashlib
 import hmac
 import time
-class TelegramLoginAPIView(APIView):
-    def post(self, request):
-        data = request.data
-        TELEGRAM_BOT_TOKEN = '5899297704:AAEaS1T9NJ64Q0nQ-uEf3-XEmvJeTLAtgeg'
-        secret_key = hashlib.sha256(TELEGRAM_BOT_TOKEN.encode()).digest()
-
-        auth_date = data.get('auth_date')
-        hash_telegram = data.get('hash')
-
-        check_string = '\n'.join([f"{k}={v}" for k, v in sorted(data.items()) if k != 'hash'])
-
-        hash_check = hmac.new(secret_key, check_string.encode(), hashlib.sha256).hexdigest()
-
-        if hash_check != hash_telegram:
-            return Response({'detail': 'Invalid data received from Telegram.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        if time.time() - int(auth_date) > 86400:
-            return Response({'detail': 'Authentication data is too old.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        user_id = data.get('user')['id']
-        first_name = data.get('user')['first_name']
-        last_name = data.get('user')['last_name']
-        username = data.get('user')['username']
-
+class TelegramAuthAPIView(APIView):
+    def post(self, request, *args, **kwargs):
+        # Nhận dữ liệu từ request
+        init_data = request.data.get('initData')
+        query_params = dict(x.split('=') for x in init_data.split('&'))
+        
+        # Xác thực dữ liệu Telegram
+        auth_date = int(query_params['auth_date'])
+        if time.time() - auth_date > 86400:
+            return Response({"error": "Auth date expired."}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        check_hash = query_params['hash']
+        TELEGRAM_BOT_TOKEN = "5882917777:AAEaS1T9NJ64Q0nQ-uEf3-XEmvJeTLAtgeg"
+        secret_key = hmac.new(key=TELEGRAM_BOT_TOKEN.encode(), msg=b'WebAppData', digestmod=hashlib.sha256).digest()
+        data_check_string = '\n'.join(f'{k}={v}' for k, v in sorted(query_params.items()) if k != 'hash')
+        calculated_hash = hmac.new(secret_key, msg=data_check_string.encode(), digestmod=hashlib.sha256).hexdigest()
+        
+        if check_hash != calculated_hash:
+            return Response({"error": "Invalid data hash."}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        # Tạo hoặc lấy user
+        telegram_id = query_params['user[id]']
+        username = query_params['user[username]']
+        first_name = query_params['user[first_name]']
+        last_name = query_params['user[last_name]']
+        
         user, created = User.objects.get_or_create(username=username, defaults={
             'first_name': first_name,
             'last_name': last_name,
-            'password': User.objects.make_random_password()
+            'password': User.objects.make_random_password(),
         })
-
+        
+        # Phát JWT
         refresh = RefreshToken.for_user(user)
         return Response({
             'refresh': str(refresh),
             'access': str(refresh.access_token),
-        })
+        }, status=status.HTTP_200_OK)
 from django.shortcuts import render
 
 def index(request):
