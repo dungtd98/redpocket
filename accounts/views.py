@@ -6,6 +6,10 @@ from django.contrib.auth import get_user_model
 from .models import UserProfile
 from wallet.models import Wallet
 from wallet.serializers import WalletSerializer
+from .serializers import TelegramAuthSerializer
+import urllib.parse
+import json
+
 User = get_user_model()
 
 
@@ -26,114 +30,127 @@ class LeaderBoardView(APIView):
         wallet = Wallet.objects.all().order_by('-sniff_coin')[:100]
         serializer = WalletSerializer(wallet, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class TelegramAuthAPIView(APIView):
+    def parse_query_params(self, query_params):
+        """Submethod to parse and decode query params."""
+        parsed_data = {}
+        for key, value in query_params.items():
+            # Decode each key-value pair
+            decoded_key = urllib.parse.unquote(key)
+            decoded_value = urllib.parse.unquote(value)
+
+            if decoded_key == "initData":
+                # Parse the initData value and combine relevant data into a single dictionary
+                init_data_dict = {}
+                init_data_items = decoded_value.split('&')
+                for item in init_data_items:
+                    k, v = item.split('=', 1)
+                    k = urllib.parse.unquote(k)
+                    v = urllib.parse.unquote(v)
+
+                    # If the key is 'user', we parse the JSON string and merge it into init_data_dict
+                    if k == "user":
+                        user_data = json.loads(v)
+                        init_data_dict.update(user_data)
+                    else:
+                        init_data_dict[k] = v
+                parsed_data.update(init_data_dict)
+            else:
+                parsed_data[decoded_key] = decoded_value
+
+        return parsed_data
     
 
-import hashlib
-import hmac
-import json
-import base64
-from django.http import JsonResponse
-from django.conf import settings
-from rest_framework_simplejwt.settings import api_settings
-from rest_framework_simplejwt.views import TokenObtainPairView
-from .models import User  # Giả sử bạn đã có model User
-
-def telegram_login_callback(request):
-    bot_token = '5899297704:AAHDQkjvDcUlSSHzmhLwRQk5-KQ17VstR58'
-    secret_key = hashlib.sha256(bot_token.encode()).digest()
-
-    hash_check = request.GET.get('hash')
-    payload = request.GET.get('payload')
+    # Danh sách các key được chấp nhận
     
-    # Decode payload
-    payload_data = json.loads(base64.b64decode(payload))
-
-    # Verify hash
-    data_check = hmac.new(secret_key, msg=payload.encode(), digestmod=hashlib.sha256).hexdigest()
-    
-    if data_check != hash_check:
-        return JsonResponse({'error': 'Invalid hash.'}, status=400)
-    
-    # Extract user information
-    user_info = payload_data['user']
-    user_id = user_info['id']
-    first_name = user_info.get('first_name', '')
-    last_name = user_info.get('last_name', '')
-    username = user_info.get('username', '')
-
-    # Create or get user
-    user, created = User.objects.get_or_create(
-        telegram_id=user_id,
-        defaults={
-            'first_name': first_name,
-            'last_name': last_name,
-            'username': username
-        }
-    )
-
-    # Generate JWT token
-    jwt_payload_handler = api_settings.JWT_PAYLOAD_HANDLER
-    jwt_encode_handler = api_settings.JWT_ENCODE_HANDLER
-    
-    payload = jwt_payload_handler(user)
-    token = jwt_encode_handler(payload)
-    
-    return JsonResponse({'token': token})
-    
-
-from django.shortcuts import redirect
-
-def redirect_to_telegram_oauth(request):
-    bot_id = '5899297704'
-    scope = 'identity'
-    public_key = 'YOUR_PUBLIC_KEY'
-    nonce = 'RANDOM_NONCE'
-
-    oauth_url = f"https://oauth.telegram.org/auth?bot_id={bot_id}&scope={scope}&public_key={public_key}&nonce={nonce}"
-    return redirect(oauth_url)
-
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import api_view, permission_classes
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def protected_view(request):
-    return JsonResponse({'message': 'This is a protected view only for authenticated users.'})
-import jwt
-
-class TelegramAuthView(APIView):
-
-    def get(self, request, *args, **kwargs):
-        bot_token = '5899297704:AAHDQkjvDcUlSSHzmhLwRQk5-KQ17VstR58'
-        secret_key = hashlib.sha256(bot_token.encode('utf-8')).digest()
-        print(request.query_params)
-        hash = request.query_params.get('hash')
-        payload = json.loads(base64.b64decode(request.GET.get('payload')).decode('utf-8'))
-
-        check_hash = hmac.new(secret_key, json.dumps(payload, separators=(',', ':')).encode('utf-8'), hashlib.sha256).hexdigest()
-
-        if hash != check_hash:
-            return Response({'error': 'Invalid hash'}, status=status.HTTP_400_BAD_REQUEST)
-
-        user_data = payload['user']
-        user, created = User.objects.get_or_create(
-            telegram_id=user_data['id'],
-            defaults={
-                'first_name': user_data['first_name'],
-                'last_name': user_data.get('last_name', ''),
-                'username': user_data.get('username', ''),
+    def get(self, request):
+        # Parse and decode the query parameters using the submethod
+        parsed_params = self.parse_query_params(request.GET)
+        print("PARSED_PARAM>>>",parsed_params)
+        # Initialize serializer with parsed parameters
+        serializer = TelegramAuthSerializer(data=parsed_params)
+        
+        if serializer.is_valid():
+            user, created = User.objects.get_or_create(
+                username=serializer.validated_data['username'],
+                defaults={
+                    'first_name': serializer.validated_data['first_name'],
+                    'last_name': serializer.validated_data['last_name'],
+                }
+            )
+            refresh = RefreshToken.for_user(user)
+            response_data = {
+                'data': {
+                    'token': {
+                        'access': str(refresh.access_token),
+                        'refresh': str(refresh),
+                    },
+                    'user': {
+                        'id': user.id,
+                        'username': user.username,
+                        'first_name': user.first_name,
+                        'last_name': user.last_name,
+                        "wallet": user.wallet.user_wallet_id  # Assuming user has a wallet field
+                        # Thêm các trường khác nếu cần
+                    }
+                },
+                'status': 200
             }
-        )
+            return Response(response_data, status=status.HTTP_200_OK, content_type='application/json')
+        return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Tạo JWT
-        jwt_payload = {
-            'user_id': user.id,
-            'username': user.username,
-        }
-        token = jwt.encode(jwt_payload, settings.SECRET_KEY, algorithm='HS256')
+# class TelegramAuthAPIView(APIView):
 
-        return Response({'token': token}, status=status.HTTP_200_OK)
-    
+#     def get(self, request):
+#         serializer = TelegramAuthSerializer(data=request.GET)
+#         if serializer.is_valid():
+#             user, created = User.objects.get_or_create(
+#                 username=serializer.validated_data['username'],
+#                 defaults={
+#                     'first_name': serializer.validated_data['first_name'],
+#                     'last_name': serializer.validated_data['last_name'],
+#                 }
+#             )
+#             refresh = RefreshToken.for_user(user)
+#             return Response({
+#                 'access': str(refresh.access_token),
+#                 'refresh': str(refresh),
+#             })
+#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+# class TelegramAuthAPIView(APIView):
+
+#     def get(self, request):
+#         serializer = TelegramAuthSerializer(data=request.GET)
+#         if serializer.is_valid():
+#             user, created = User.objects.get_or_create(
+#                 username=serializer.validated_data['username'],
+#                 defaults={
+#                     'first_name': serializer.validated_data['first_name'],
+#                     'last_name': serializer.validated_data['last_name'],
+#                 }
+#             )
+#             refresh = RefreshToken.for_user(user)
+#             response_data = {
+#                 'data': {
+#                     'token': {
+#                         'access': str(refresh.access_token),
+#                         'refresh': str(refresh),
+#                     },
+#                     'user': {
+#                         'id': user.id,
+#                         'username': user.username,
+#                         'first_name': user.first_name,
+#                         'last_name': user.last_name,
+#                         "wallet": user.wallet,
+#                         # Thêm các trường khác nếu cần
+#                     }
+#                 },
+#                 'status': 200
+#             }
+#             return Response(response_data, status=status.HTTP_200_OK)
+#         return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 from django.shortcuts import render
 
 def index(request):
