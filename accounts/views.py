@@ -3,7 +3,6 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth import get_user_model
-from .models import UserProfile
 from wallet.models import Wallet
 from wallet.serializers import WalletSerializer
 from .serializers import TelegramAuthSerializer
@@ -15,7 +14,6 @@ User = get_user_model()
 
 class GetUserProfileView(APIView):
     def get(self, request):
-        user_profile = UserProfile.objects.get(user=request.user)
         wallet = Wallet.objects.get(user=request.user)
 
         response_data = {
@@ -111,7 +109,6 @@ class TelegramLoginAPIView(APIView):
                     "first_name": user.first_name,
                     "last_name": user.last_name,
                     "username": user.username,
-                    "email": user.email,
                     "telegram_id":user_data['id']
                 }
             }
@@ -120,39 +117,20 @@ class TelegramLoginAPIView(APIView):
         return Response(response_data, status=status.HTTP_200_OK, content_type='application/json')
 
     def verify_telegram_init_data(self, telegram_init_data: str, bot_token: str) -> bool:
-        # Decode the URL-encoded string
         encoded = urllib.parse.unquote(telegram_init_data)
-
-        # Create the secret HMAC using the bot token and 'WebAppData'
         secret = hmac.new(b'WebAppData', bot_token.encode('utf-8'), hashlib.sha256)
-
-        # Split the encoded data into an array of key-value pairs
         arr = encoded.split('&')
-
-        # Find the index of the 'hash' parameter
         hash_index = next(i for i, s in enumerate(arr) if s.startswith('hash='))
-        
-        # Extract the hash value and remove it from the array
         hash_value = arr.pop(hash_index).split('=')[1]
-
-        # Sort the remaining key-value pairs
         arr.sort()
-
-        # Create the data check string
         data_check_string = '\n'.join(arr)
-
-        # Calculate the HMAC for the data check string
         calculated_hash = hmac.new(secret.digest(), data_check_string.encode('utf-8'), hashlib.sha256).hexdigest()
-
-        # Compare the calculated hash with the provided hash
         return calculated_hash == hash_value
 
     def get_or_create_user(self, user_data):
         user_info = json.loads(user_data)
-        # Here you would typically fetch the user from the database or create a new one
-        # This is a simplified example, adjust according to your user model
         user, created = User.objects.get_or_create(
-            # telegram_id=user_info['id'],
+            telegram_id=user_info['id'],
             defaults={
                 'first_name': user_info['first_name'],
                 'last_name': user_info.get('last_name', ''),

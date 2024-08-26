@@ -1,33 +1,44 @@
 import uuid
 from django.db import models
-from django.contrib.auth import get_user_model
-from django.contrib.auth.models import AbstractUser, Group, Permission
-# Create your models here.
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.db import models
 
-User = get_user_model()
-class UserProfile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
-    telegram_id = models.CharField(max_length=255)
+class CustomUserManager(BaseUserManager):
+    def create_user(self, username, password=None, **extra_fields):
+        if not username:
+            raise ValueError('The username field must be set')
+        user = self.model(username=username, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, username, password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+
+        if extra_fields.get('is_staff') is not True:
+            raise ValueError('Superuser must have is_staff=True.')
+        if extra_fields.get('is_superuser') is not True:
+            raise ValueError('Superuser must have is_superuser=True.')
+
+        return self.create_user(username, password, **extra_fields)
+
+class CustomUser(AbstractBaseUser, PermissionsMixin):
+    username = models.CharField(unique=True, max_length=255)
+    telegram_id = models.CharField(max_length=255, blank=True, null=True)
     user_level = models.IntegerField(default=1)
     daily_limit_open_pouch = models.IntegerField(default=1)
     daily_limit_share_pouch = models.IntegerField(default=1)
+    is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False)
+    first_name = models.CharField(max_length=255, blank=True, null=True)
+    last_name = models.CharField(max_length=255, blank=True, null=True)
+    date_joined = models.DateTimeField(auto_now_add=True)
+    referral_code = models.CharField(max_length=70, blank=True, null=True)
+    objects = CustomUserManager()
+
+    USERNAME_FIELD = 'username'
+    REQUIRED_FIELDS = []
+
     def __str__(self):
-        return f'{self.user.username} Profile'
-
-
-class User(AbstractUser):
-    telegram_id = models.CharField(max_length=20, unique=True, null=True, blank=True)
-    groups = models.ManyToManyField(
-        Group,
-        related_name='custom_user_set',  # Change this to a unique related_name
-        blank=True,
-        help_text='The groups this user belongs to.',
-        verbose_name='groups',
-    )
-    user_permissions = models.ManyToManyField(
-        Permission,
-        related_name='custom_user_set_permissions',  # Change this to a unique related_name
-        blank=True,
-        help_text='Specific permissions for this user.',
-        verbose_name='user permissions',
-    )
+        return self.username

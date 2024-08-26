@@ -1,18 +1,12 @@
-from .models import UserProfile
-from rest_framework import serializers
-
-class UserProfileSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = UserProfile
-        fields = '__all__'
-
-# serializers.py
 
 from rest_framework import serializers
 import hashlib
 import hmac
 import time
+from django.contrib.auth import get_user_model
 
+
+User=get_user_model() 
 class TelegramAuthSerializer(serializers.Serializer):
     id = serializers.CharField()
     first_name = serializers.CharField()
@@ -47,9 +41,7 @@ class TelegramAuthSerializer(serializers.Serializer):
         """Filter the dictionary to only keep allowed keys."""
         allowed_keys = {'id', 'first_name', 'last_name', 'username', 'auth_date', 'hash'}
         return {key: value for key, value in data.items() if key in allowed_keys}
-    
-from rest_framework import serializers
-from .models import User
+
 
 class SignInSerializer(serializers.Serializer):
     initData = serializers.CharField()

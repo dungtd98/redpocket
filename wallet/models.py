@@ -8,9 +8,9 @@ User = get_user_model()
 # Create your models here.
 class Wallet(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='wallet')
-    user_wallet_id = models.CharField(max_length=255, unique=True)
+    user_wallet_id = models.CharField(max_length=255, unique=True, blank=True, null=True)
     sniff_coin = models.DecimalField(max_digits=10, decimal_places=2, default=100.0)
-    sniff = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
+    sniff_point = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     cards = models.IntegerField(default=0)
     def __str__(self):
         return f'{self.user.username} Wallet'
