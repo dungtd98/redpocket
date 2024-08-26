@@ -126,3 +126,24 @@ class GetActiveTaskView(APIView):
         active_tasks = Task.objects.filter(task_expired__gt=timezone.now())
         return Response(TaskSerializer(active_tasks, many=True).data, status=status.HTTP_200_OK)
 
+class ClaimNewUserAPIView(APIView):
+    def post(self, request, *args, **kwargs):
+        wallet = Wallet.objects.get(user=request.user)
+        wallet.sniff_coin += 100
+        wallet.save()
+
+        user_data = {
+            "id": request.user.id,
+            "name": f"{request.user.first_name} {request.user.last_name}",
+            "wallet": wallet.user_wallet_id,
+            "balance_sniff_coin": wallet.sniff_coin,
+            "balance_sniff_point": wallet.sniff,
+            "claim_expire": "2023-12-31T23:59:59Z",  # Example static date
+            "createdCountPouch": 0,  # Example static value
+            "createdCountPouchToday": 0,  # Example static value
+            "level": {
+                "send_envelope": 5  # Example static value
+            }
+        }
+
+        return Response({"data":{"user": user_data}}, status=status.HTTP_200_OK)

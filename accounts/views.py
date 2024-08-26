@@ -16,13 +16,58 @@ User = get_user_model()
 class GetUserProfileView(APIView):
     def get(self, request):
         user_profile = UserProfile.objects.get(user=request.user)
-        return Response({
-            'first_name': request.user.first_name,
-            'last_name': request.user.last_name,
-            'email': request.user.email,
-            'level': user_profile.user_level,
-            
-        }, status=status.HTTP_200_OK)
+        wallet = Wallet.objects.get(user=request.user)
+
+        response_data = {
+            "status": "SUCCESS",
+            "statusCode": 200,
+            "data": {
+                "id": request.user.id,
+                "created_at": request.user.date_joined.isoformat(),
+                "updated_at": request.user.last_login.isoformat() if request.user.last_login else None,
+                "id_telegram": request.user.telegram_id,
+                "username": request.user.username,
+                "first_name": request.user.first_name,
+                "last_name": request.user.last_name,
+                "balance_sniff_point": wallet.sniff_point,
+                "balance_sniff_point_ath": 0,  # Example static value
+                "balance_sniff_coin": wallet.sniff_coin,
+                "balance_scratch_card": 0,  # Example static value
+                "balance_usdt": "0.00",  # Example static value
+                "trigger_up_level": False,  # Example static value
+                "referral_code": request.user.referral_code,
+                "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwiaWRfdGVsZWdyYW0iOjU5NjQxODQzMDksImlhdCI6MTcyNDY1ODU5OCwiZXhwIjoxNzI5ODQyNTk4fQ.feCY37ptXTbe5WKp9R2oRGawmrPGuCiC8bOIHAxxrRA",  # Example static value
+                "wallet": None,  # Example static value
+                "network": None,  # Example static value
+                "age_wallet": None,  # Example static value
+                "age_telegram": None,  # Example static value
+                "level_id_old": 0,  # Example static value
+                "level_id": 0,  # Example static value
+                "claim_expire": None,  # Example static value
+                "level": {
+                    "id": 1,  # Example static value
+                    "created_at": "2024-08-26T07:09:24.978Z",  # Example static value
+                    "updated_at": "2024-08-26T07:09:24.978Z",  # Example static value
+                    "level_number": 0,  # Example static value
+                    "level_name": "Level 0",  # Example static value
+                    "require_balance": 0,  # Example static value
+                    "cost_level_up": 0,  # Example static value
+                    "boost": 5,  # Example static value
+                    "send_envelope": 1  # Example static value
+                },
+                "histories_open_coin_pouchs": [],  # Example static value
+                "histories_send_coin_pouchs": [],  # Example static value
+                "createdCountPouchToday": 0,  # Example static value
+                "openedCountPouchToday": 0,  # Example static value
+                "createdCountPouch": 0,  # Example static value
+                "trigger_up_level_data": None,  # Example static value
+                "limitAmountCoinPouchToday": 100000,  # Example static value
+                "totalAmountPouchToday": 0  # Example static value
+            },
+            "message": "GET_INFOR_USER_SUCCESSFULLY"
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
     
 
 class LeaderBoardView(APIView):
@@ -31,75 +76,6 @@ class LeaderBoardView(APIView):
         serializer = WalletSerializer(wallet, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-
-class TelegramAuthAPIView(APIView):
-    def parse_query_params(self, query_params):
-        """Submethod to parse and decode query params."""
-        parsed_data = {}
-        for key, value in query_params.items():
-            # Decode each key-value pair
-            decoded_key = urllib.parse.unquote(key)
-            decoded_value = urllib.parse.unquote(value)
-
-            if decoded_key == "initData":
-                # Parse the initData value and combine relevant data into a single dictionary
-                init_data_dict = {}
-                init_data_items = decoded_value.split('&')
-                for item in init_data_items:
-                    k, v = item.split('=', 1)
-                    k = urllib.parse.unquote(k)
-                    v = urllib.parse.unquote(v)
-
-                    # If the key is 'user', we parse the JSON string and merge it into init_data_dict
-                    if k == "user":
-                        user_data = json.loads(v)
-                        init_data_dict.update(user_data)
-                    else:
-                        init_data_dict[k] = v
-                parsed_data.update(init_data_dict)
-            else:
-                parsed_data[decoded_key] = decoded_value
-
-        return parsed_data
-    
-
-    # Danh sách các key được chấp nhận
-    
-    def get(self, request):
-        # Parse and decode the query parameters using the submethod
-        parsed_params = self.parse_query_params(request.GET)
-        print("PARSED_PARAM>>>",parsed_params)
-        # Initialize serializer with parsed parameters
-        serializer = TelegramAuthSerializer(data=parsed_params)
-        
-        if serializer.is_valid():
-            user, created = User.objects.get_or_create(
-                username=serializer.validated_data['username'],
-                defaults={
-                    'first_name': serializer.validated_data['first_name'],
-                    'last_name': serializer.validated_data['last_name'],
-                }
-            )
-            refresh = RefreshToken.for_user(user)
-            response_data = {
-                'data': {
-                    'token': {
-                        'access': str(refresh.access_token),
-                        'refresh': str(refresh),
-                    },
-                    'user': {
-                        'id': user.id,
-                        'username': user.username,
-                        'first_name': user.first_name,
-                        'last_name': user.last_name,
-                        "wallet": user.wallet.user_wallet_id  # Assuming user has a wallet field
-                        # Thêm các trường khác nếu cần
-                    }
-                },
-                'status': 200
-            }
-            return Response(response_data, status=status.HTTP_200_OK, content_type='application/json')
-        return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 import hashlib
 import hmac
 import time
@@ -126,21 +102,20 @@ class TelegramLoginAPIView(APIView):
         response_data = {
             "status": 200,
             "data": {
-                "data": {
-                    "token": {
-                        "access": str(refresh.access_token),
-                        "refresh": str(refresh),
-                    },
-                    "user": {
-                        "id": user.id,
-                        "first_name": user.first_name,
-                        "last_name": user.last_name,
-                        "username": user.username,
-                        "email": user.email,
-                        "telegram_id":user_data['id']
-                    }
+                "token": {
+                    "access_token": str(refresh.access_token),
+                    "refresh": str(refresh),
+                },
+                "user": {
+                    "id": user.id,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "username": user.username,
+                    "email": user.email,
+                    "telegram_id":user_data['id']
                 }
             }
+            
         }
         return Response(response_data, status=status.HTTP_200_OK, content_type='application/json')
 
