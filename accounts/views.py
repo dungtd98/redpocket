@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from .models import UserProfile
 from wallet.models import Wallet
 from wallet.serializers import WalletSerializer
-from .serializers import TelegramAuthSerializer
+from .serializers import *
 import urllib.parse
 import json
 
@@ -100,47 +100,17 @@ class TelegramAuthAPIView(APIView):
             }
             return Response(response_data, status=status.HTTP_200_OK, content_type='application/json')
         return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-import hashlib
-import hmac
-import time
+from .ultis import AuthService
 class TelegramLoginAPIView(APIView):
-    def post(self, request, *args, **kwargs):
-        # Nhận dữ liệu từ request
-        init_data = request.data.get('initData')
-        query_params = dict(x.split('=') for x in init_data.split('&'))
-        
-        # Xác thực dữ liệu Telegram
-        auth_date = int(query_params['auth_date'])
-        if time.time() - auth_date > 86400:
-            return Response({"error": "Auth date expired."}, status=status.HTTP_401_UNAUTHORIZED)
-        
-        check_hash = query_params['hash']
-        TELEGRAM_BOT_TOKEN = "5882917777:AAEaS1T9NJ64Q0nQ-uEf3-XEmvJeTLAtgeg"
-        secret_key = hmac.new(key=TELEGRAM_BOT_TOKEN.encode(), msg=b'WebAppData', digestmod=hashlib.sha256).digest()
-        data_check_string = '\n'.join(f'{k}={v}' for k, v in sorted(query_params.items()) if k != 'hash')
-        calculated_hash = hmac.new(secret_key, msg=data_check_string.encode(), digestmod=hashlib.sha256).hexdigest()
-        
-        if check_hash != calculated_hash:
-            return Response({"error": "Invalid data hash."}, status=status.HTTP_401_UNAUTHORIZED)
-        
-        # Tạo hoặc lấy user
-        telegram_id = query_params['user[id]']
-        username = query_params['user[username]']
-        first_name = query_params['user[first_name]']
-        last_name = query_params['user[last_name]']
-        
-        user, created = User.objects.get_or_create(username=username, defaults={
-            'first_name': first_name,
-            'last_name': last_name,
-            'password': User.objects.make_random_password(),
-        })
-        
-        # Phát JWT
-        refresh = RefreshToken.for_user(user)
-        return Response({
-            'refresh': str(refresh),
-            'access': str(refresh.access_token),
-        }, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = SignInDtoSerializer(data=request.data)
+        if serializer.is_valid():
+            auth_service = AuthService()
+            user = auth_service.get_authenticated_user(serializer.validated_data)
+            tokens = auth_service.generate_auth_tokens(user)
+            return Response({'user': user, 'token': tokens})
+        return Response(serializer.errors, status=400)
 from django.shortcuts import render
 
 def index(request):

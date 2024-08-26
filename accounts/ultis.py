@@ -1,60 +1,84 @@
-# import secrets
-# import base64
-# from cryptography.hazmat.primitives.asymmetric import rsa
-# from cryptography.hazmat.primitives import serialization
-# from cryptography.hazmat.backends import default_backend
+from .models import User
+from .serializers import UpdateUserDtoSerializer, CreateUserDtoSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.conf import settings
+import random
+import string
 
-# # Step 1: Generate a nonce
-# nonce = secrets.token_urlsafe(16)
+def generate_referral_code(length=8):
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
 
-# # Step 2: Generate RSA key pair
-# private_key = rsa.generate_private_key(
-#     public_exponent=65537,
-#     key_size=2048,
-#     backend=default_backend()
-# )
-# public_key = private_key.public_key()
+def get_telegram_age(telegram_id):
+    # Implement logic to calculate Telegram age
+    pass
 
-# # Step 3: Convert the public key to PEM format and encode in URL-safe base64
-# public_key_pem = b"""-----BEGIN PUBLIC KEY-----
-# MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAk/vfs0ytA8P+ubKxUPW1
-# w9qthOuOUH2QtIhmyA+9/qbIKHlf1bR+BcwpXU+8TLglAREs+qm9MeaIrhKH6ITI
-# 4nauIxsyorEMklo4xZlDw+uGekmBOZbZ2mbKCJNiHVFuP/sg86A02aUvn6udrxjQ
-# kakZTm81713b1sFq4qwy2a+Ee0rSq2dywxFWObAdWDzwqQx2d/XNGWkvzct9REE6
-# XPQNjTLvPOVpcfkkpLscAH5HZpJ7JMi3Tj6vN2TzhWjyESj5ptkFZGphOo8PqrQA
-# HlH2xErX2K68kJ/b36Dn8PC4rAZAzmiG0DNRtkKrPUolWQyi9Qbl7oVJBO55AiZK
-# WQIDAQAB
-# -----END PUBLIC KEY-----"""
-# public_key_b64 = base64.urlsafe_b64encode(public_key_pem).decode('utf-8')
+def get_wallet_age(wallet, network):
+    # Implement logic to calculate Wallet age
+    pass
+class AuthService:
+    def __init__(self):
+        self.user_service = UserService()  # Implement the user service
 
-# # Step 4: Construct the OAuth URL
-# bot_id = '5899297704'
-# scope = 'identity'
+    def generate_auth_tokens(self, user):
+        refresh = RefreshToken.for_user(user)
+        access = refresh.access_token
+        return {
+            'access': str(access),
+            'refresh': str(refresh),
+        }
 
-# telegram_oauth_url = f"https://oauth.telegram.org/auth?bot_id={bot_id}&scope={scope}&public_key={public_key_b64}&nonce={nonce}"
+    def handle_login(self, user, wallet=None):
+        tokens = self.generate_auth_tokens(user)
+        data_update = {}
 
-# print("Telegram OAuth URL:", telegram_oauth_url)
+        if wallet and not user.wallet:
+            age_wallet = get_wallet_age(wallet, 'TON')
+            age_telegram = get_telegram_age(user.id_telegram)
+            data_update.update({
+                'wallet': wallet,
+                'age_wallet': age_wallet,
+                'age_telegram': age_telegram,
+                'balance_sniff_point': 100,
+                'balance_sniff_coin': age_wallet + age_telegram * 365,
+            })
 
-import base64
-import urllib.parse
+        if data_update:
+            serializer = UpdateUserDtoSerializer(user, data=data_update, partial=True)
+            if serializer.is_valid():
+                serializer.save()
 
-# Assuming you have your public key in PEM format in `public_key_pem`:
-public_key_pem = b"""-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAk/vfs0ytA8P+ubKxUPW1
-w9qthOuOUH2QtIhmyA+9/qbIKHlf1bR+BcwpXU+8TLglAREs+qm9MeaIrhKH6ITI
-4nauIxsyorEMklo4xZlDw+uGekmBOZbZ2mbKCJNiHVFuP/sg86A02aUvn6udrxjQ
-kakZTm81713b1sFq4qwy2a+Ee0rSq2dywxFWObAdWDzwqQx2d/XNGWkvzct9REE6
-XPQNjTLvPOVpcfkkpLscAH5HZpJ7JMi3Tj6vN2TzhWjyESj5ptkFZGphOo8PqrQA
-HlH2xErX2K68kJ/b36Dn8PC4rAZAzmiG0DNRtkKrPUolWQyi9Qbl7oVJBO55AiZK
-WQIDAQAB
------END PUBLIC KEY-----"""
+        user = self.user_service.get_user_info(user.id)
+        return {'user': user, 'token': tokens}
 
-# Base64 URL-safe encode
-public_key_b64 = base64.urlsafe_b64encode(public_key_pem).decode('utf-8')
+    def get_authenticated_user(self, sign_in_dto):
+        initData = sign_in_dto.get('initData')
+        refCode = sign_in_dto.get('refCode', 'none')
+        user_telegram_info = self.get_telegram_init_data(initData)
+        user = self.user_service.get_user_by_telegram_id(user_telegram_info['id'])
 
-# URL-encode the base64 string
-public_key_urlencoded = urllib.parse.quote(public_key_b64)
+        if not user:
+            referral_code = generate_referral_code()
+            while self.user_service.is_referral_code_exists(referral_code):
+                referral_code = generate_referral_code()
 
-telegram_oauth_url = f"https://oauth.telegram.org/auth?bot_id=5899297704&scope=identity&public_key={public_key_urlencoded}&nonce=9WN7ZMBHfle_Vi7IAcQAuQ"
+            create_user_data = {
+                'id_telegram': user_telegram_info['id'],
+                'username': user_telegram_info['username'],
+                'first_name': user_telegram_info['first_name'],
+                'last_name': user_telegram_info.get('last_name', ''),
+                'referral_code': referral_code
+            }
+            serializer = CreateUserDtoSerializer(data=create_user_data)
+            if serializer.is_valid():
+                user = serializer.save()
 
-print("Telegram OAuth URL:", telegram_oauth_url)
+            if refCode != 'none':
+                referee = self.user_service.get_user_by_referral_code(refCode)
+                if referee:
+                    self.referral_service.create_referral(referee.id, user.id)
+
+        return user
+
+    def get_telegram_init_data(self, telegram_init_data):
+        # Parsing logic as per your requirement
+        return parsed_data
