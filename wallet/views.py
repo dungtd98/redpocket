@@ -70,11 +70,38 @@ class ClaimPouchTokenView(APIView):
 
 class GetPouchListInfoView(APIView):
     def get(self, request, *args, **kwargs):
-        sent_pouchs = GiveawayPouch.objects.filter(user=request.user)
-        unopened_pouchs = get_values_with_key_pattern(f"claim_pouch_*_{request.user.id}")
+        sent_pouches = GiveawayPouch.objects.filter(user=request.user)
+        unopened_pouches = get_values_with_key_pattern(f"claim_pouch_*_{request.user.id}")
+
+        response_data = []
+        for pouch in sent_pouches:
+            pouch_data = {
+                "id": pouch.id,
+                "amount": pouch.sniff_coin,
+                "amount_claim": sum(json.loads(get_from_redis(f"claim_pouch_{pouch.id}_{user.id}")) for user in pouch.user.all()),
+                "owner_id": pouch.user.id,
+                "status": "OPEN" if pouch.expired_date > timezone.now() else "CLAIM",
+                "time_end": pouch.expired_date.isoformat(),
+                "opened": len(json.loads(get_from_redis(f"giveaway_pouch_{pouch.id}")).get("values_array", []))
+            }
+            response_data.append(pouch_data)
+
+        for unopened_pouch in unopened_pouches:
+            pouch_data = {
+                "id": unopened_pouch['id'],
+                "amount": unopened_pouch['amount'],
+                "amount_claim": unopened_pouch['amount_claim'],
+                "owner_id": unopened_pouch['owner_id'],
+                "status": unopened_pouch['status'],
+                "time_end": unopened_pouch['time_end'],
+                "opened": unopened_pouch['opened']
+            }
+            response_data.append(pouch_data)
+
         response = {
-            "sent_pouchs": GiveawayPouchSerializer(sent_pouchs, many=True).data,
-            "unopened_pouchs": unopened_pouchs
+            "statusCode": 200,
+            "message": "Success",
+            "data": response_data
         }
         return Response(response, status=status.HTTP_200_OK)
     

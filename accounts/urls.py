@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import GetUserProfileView, LeaderBoardView, TelegramAuthAPIView, index, AuthService
+from .views import GetUserProfileView, LeaderBoardView, TelegramAuthAPIView, index, TelegramLoginAPIView
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
@@ -10,6 +10,6 @@ urlpatterns = [
     path('user/me', GetUserProfileView.as_view(), name='get_user_profile'),
     path('leaderboard/', LeaderBoardView.as_view(), name='leaderboard'),
     path('telegram-auth/', TelegramAuthAPIView.as_view(), name='telegram_auth'),
-    path('telegram-login/', AuthService.as_view(), name='telegram_auth_v2'),
+    path('telegram-login/', TelegramLoginAPIView.as_view(), name='telegram_auth_v2'),
     path('', index, name='index'),
 ]

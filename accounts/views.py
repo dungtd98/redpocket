@@ -1,4 +1,3 @@
-from django.shortcuts import render
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -7,7 +6,7 @@ from django.contrib.auth import get_user_model
 from .models import UserProfile
 from wallet.models import Wallet
 from wallet.serializers import WalletSerializer
-from .serializers import *
+from .serializers import TelegramAuthSerializer
 import urllib.parse
 import json
 
@@ -101,107 +100,92 @@ class TelegramAuthAPIView(APIView):
             }
             return Response(response_data, status=status.HTTP_200_OK, content_type='application/json')
         return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+import hashlib
+import hmac
+import time
+TELEGRAM_BOT_TOKEN = "5882917777:AAEaS1T9NJ64Q0nQ-uEf3-XEmvJeTLAtgeg"
 
+class TelegramLoginAPIView(APIView):
+    def post(self, request):
+        init_data = request.data.get("initData")
+        ref_code = request.data.get("refCode", "none")
 
+        # Verify the authenticity of the Telegram initialization data
+        if not self.verify_telegram_init_data(init_data, TELEGRAM_BOT_TOKEN):
+            return Response({"detail": "Invalid Telegram signature"}, status=status.HTTP_400_BAD_REQUEST)
 
-from rest_framework import status
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from django.utils.crypto import salted_hmac
-from django.conf import settings
-from rest_framework_simplejwt.tokens import RefreshToken
-from .models import User
-from .serializers import SignInSerializer, CreateUserSerializer
-from .ultis import generate_referral_code
+        # Extract parameters from init_data
+        params = dict(item.split('=') for item in urllib.parse.unquote(init_data).split('&'))
+        user_data = json.loads(params['user'])
 
-class AuthService(APIView):
-    def post(self, request, *args, **kwargs):
-        sign_in_data = SignInSerializer(data=request.data)
-        sign_in_data.is_valid(raise_exception=True)
-        user = self.get_authenticated_user(sign_in_data.validated_data)
-        if user:
-            return self.handle_login(user)
-        return Response({'detail': 'Authentication failed.'}, status=status.HTTP_400_BAD_REQUEST)
+        # Here you would typically create or get the user based on Telegram user data
+        user = self.get_or_create_user(params['user'])
 
-    def get_authenticated_user(self, sign_in_data):
-        init_data = sign_in_data['initData']
-        ref_code = sign_in_data['refCode']
-
-        # Decode and parse the telegram init data
-        user_telegram_info = self.get_telegram_init_data(init_data)
-        id_telegram = user_telegram_info.get('id')
-        
-        # Check if the user already exists
-        user = User.objects.filter(id_telegram=id_telegram).first()
-
-        # If the user does not exist, create the user
-        if not user:
-            referral_code = self.generate_unique_referral_code()
-            data_create = {
-                'id_telegram': id_telegram,
-                'username': user_telegram_info.get('username'),
-                'first_name': user_telegram_info.get('first_name'),
-                'last_name': user_telegram_info.get('last_name'),
-                'referral_code': referral_code
-            }
-            user_serializer = CreateUserSerializer(data=data_create)
-            user_serializer.is_valid(raise_exception=True)
-            user = user_serializer.save()
-
-            if ref_code != 'none':
-                referee = User.objects.filter(referral_code=ref_code).first()
-                if referee:
-                    # Assuming you have a Referral model/service to handle this
-                    self.create_referral(referee.id, user.id)
-
-        return user
-
-    def generate_unique_referral_code(self):
-        while True:
-            code = generate_referral_code()
-            if not User.objects.filter(referral_code=code).exists():
-                return code
-
-    def handle_login(self, user):
-        access, refresh = self.generate_auth_tokens(user)
-
-        return Response({
-            'user': user,
-            'token': {
-                'access': access,
-                'refresh': refresh
-            }
-        }, status=status.HTTP_200_OK)
-
-    def generate_auth_tokens(self, user):
+        # Create a JWT token for the user
         refresh = RefreshToken.for_user(user)
-        access = refresh.access_token
-        return str(access), str(refresh)
+        response_data = {
+            "status": 200,
+            "data": {
+                "data": {
+                    "token": {
+                        "access": str(refresh.access_token),
+                        "refresh": str(refresh),
+                    },
+                    "user": {
+                        "id": user.id,
+                        "first_name": user.first_name,
+                        "last_name": user.last_name,
+                        "username": user.username,
+                        "email": user.email,
+                        "telegram_id":user_data['id']
+                    }
+                }
+            }
+        }
+        return Response(response_data, status=status.HTTP_200_OK, content_type='application/json')
 
-    def get_telegram_init_data(self, telegram_init_data):
-        first_layer_init_data = dict(urllib.parse.parse_qsl(telegram_init_data))
-        init_data = {k: json.loads(v) if self.is_json(v) else v for k, v in first_layer_init_data.items()}
-        return init_data.get('user')
-
-    def verify_telegram_init_data(self, telegram_init_data, bot_token=None):
-        bot_token = bot_token or settings.TELEGRAM_BOT_TOKEN
+    def verify_telegram_init_data(self, telegram_init_data: str, bot_token: str) -> bool:
+        # Decode the URL-encoded string
         encoded = urllib.parse.unquote(telegram_init_data)
-        secret = salted_hmac('WebAppData', bot_token, algorithm='sha256')
+
+        # Create the secret HMAC using the bot token and 'WebAppData'
+        secret = hmac.new(b'WebAppData', bot_token.encode('utf-8'), hashlib.sha256)
+
+        # Split the encoded data into an array of key-value pairs
         arr = encoded.split('&')
+
+        # Find the index of the 'hash' parameter
         hash_index = next(i for i, s in enumerate(arr) if s.startswith('hash='))
+        
+        # Extract the hash value and remove it from the array
         hash_value = arr.pop(hash_index).split('=')[1]
+
+        # Sort the remaining key-value pairs
         arr.sort()
+
+        # Create the data check string
         data_check_string = '\n'.join(arr)
-        _hash = salted_hmac('sha256', secret, data_check_string).hexdigest()
-        return _hash == hash_value
 
-    def is_json(self, myjson):
-        try:
-            json.loads(myjson)
-        except ValueError:
-            return False
-        return True
+        # Calculate the HMAC for the data check string
+        calculated_hash = hmac.new(secret.digest(), data_check_string.encode('utf-8'), hashlib.sha256).hexdigest()
 
+        # Compare the calculated hash with the provided hash
+        return calculated_hash == hash_value
+
+    def get_or_create_user(self, user_data):
+        user_info = json.loads(user_data)
+        # Here you would typically fetch the user from the database or create a new one
+        # This is a simplified example, adjust according to your user model
+        user, created = User.objects.get_or_create(
+            # telegram_id=user_info['id'],
+            defaults={
+                'first_name': user_info['first_name'],
+                'last_name': user_info.get('last_name', ''),
+                'username': user_info.get('username', ''),
+            }
+        )
+        return user
+from django.shortcuts import render
 
 def index(request):
     return render(request, 'index.html')
