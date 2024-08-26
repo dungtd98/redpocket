@@ -6,6 +6,10 @@ from django.contrib.auth import get_user_model
 from .models import UserProfile
 from wallet.models import Wallet
 from wallet.serializers import WalletSerializer
+from .serializers import TelegramAuthSerializer
+import urllib.parse
+import json
+
 User = get_user_model()
 
 
@@ -26,117 +30,117 @@ class LeaderBoardView(APIView):
         wallet = Wallet.objects.all().order_by('-sniff_coin')[:100]
         serializer = WalletSerializer(wallet, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class TelegramAuthAPIView(APIView):
+    def parse_query_params(self, query_params):
+        """Submethod to parse and decode query params."""
+        parsed_data = {}
+        for key, value in query_params.items():
+            # Decode each key-value pair
+            decoded_key = urllib.parse.unquote(key)
+            decoded_value = urllib.parse.unquote(value)
+
+            if decoded_key == "initData":
+                # Parse the initData value and combine relevant data into a single dictionary
+                init_data_dict = {}
+                init_data_items = decoded_value.split('&')
+                for item in init_data_items:
+                    k, v = item.split('=', 1)
+                    k = urllib.parse.unquote(k)
+                    v = urllib.parse.unquote(v)
+
+                    # If the key is 'user', we parse the JSON string and merge it into init_data_dict
+                    if k == "user":
+                        user_data = json.loads(v)
+                        init_data_dict.update(user_data)
+                    else:
+                        init_data_dict[k] = v
+                parsed_data.update(init_data_dict)
+            else:
+                parsed_data[decoded_key] = decoded_value
+
+        return parsed_data
     
 
+    # Danh sách các key được chấp nhận
+    
+    def get(self, request):
+        # Parse and decode the query parameters using the submethod
+        parsed_params = self.parse_query_params(request.GET)
+        print("PARSED_PARAM>>>",parsed_params)
+        # Initialize serializer with parsed parameters
+        serializer = TelegramAuthSerializer(data=parsed_params)
+        
+        if serializer.is_valid():
+            user, created = User.objects.get_or_create(
+                username=serializer.validated_data['username'],
+                defaults={
+                    'first_name': serializer.validated_data['first_name'],
+                    'last_name': serializer.validated_data['last_name'],
+                }
+            )
+            refresh = RefreshToken.for_user(user)
+            response_data = {
+                'data': {
+                    'token': {
+                        'access': str(refresh.access_token),
+                        'refresh': str(refresh),
+                    },
+                    'user': {
+                        'id': user.id,
+                        'username': user.username,
+                        'first_name': user.first_name,
+                        'last_name': user.last_name,
+                        "wallet": user.wallet.user_wallet_id  # Assuming user has a wallet field
+                        # Thêm các trường khác nếu cần
+                    }
+                },
+                'status': 200
+            }
+            return Response(response_data, status=status.HTTP_200_OK, content_type='application/json')
+        return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 import hashlib
 import hmac
-import json
-import base64
-from django.http import JsonResponse
-from django.conf import settings
-from rest_framework_simplejwt.settings import api_settings
-from rest_framework_simplejwt.views import TokenObtainPairView
-from .models import User
-import jwt
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import api_view, permission_classes
-import urllib.parse
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def protected_view(request):
-    return JsonResponse({'message': 'This is a protected view only for authenticated users.'})
-
 import time
-class TelegramAuthViewV1(APIView):
-
-    def get(self, request, *args, **kwargs):
-        bot_token = '5899297704:AAHDQkjvDcUlSSHzmhLwRQk5-KQ17VstR58'
-        secret_key = hashlib.sha256(bot_token.encode('utf-8')).digest()
-        print(request.query_params)
-        hash = request.query_params.get('hash')
-        payload = json.loads(base64.b64decode(request.GET.get('payload',"")).decode('utf-8'))
-        
-        check_hash = hmac.new(secret_key, json.dumps(payload, separators=(',', ':')).encode('utf-8'), hashlib.sha256).hexdigest()
-
-        if hash != check_hash:
-            return Response({'error': 'Invalid hash'}, status=status.HTTP_400_BAD_REQUEST)
-
-        user_data = payload['user']
-        user, created = User.objects.get_or_create(
-            telegram_id=user_data['id'],
-            defaults={
-                'first_name': user_data['first_name'],
-                'last_name': user_data.get('last_name', ''),
-                'username': user_data.get('username', ''),
-            }
-        )
-
-        # Tạo JWT
-        jwt_payload = {
-            'user_id': user.id,
-            'username': user.username,
-        }
-        token = jwt.encode(jwt_payload, settings.SECRET_KEY, algorithm='HS256')
-
-        return Response({'token': token}, status=status.HTTP_200_OK)
-    
-class TelegramAuthViewV2(APIView):
-    def post(self, request):
+class TelegramLoginAPIView(APIView):
+    def post(self, request, *args, **kwargs):
+        # Nhận dữ liệu từ request
         init_data = request.data.get('initData')
-
-        if not init_data:
-            return Response({'error': 'initData is required'}, status=400)
-
-        # Decode the URL-encoded initData
-        decoded_data = urllib.parse.unquote(init_data)
-
-        # Parse the decoded data into a dictionary
-        parsed_data = urllib.parse.parse_qs(decoded_data)
-
-        # Extract hash and auth_date from the parsed data
-        telegram_hash = parsed_data.get('hash', [None])[0]
-        auth_date = parsed_data.get('auth_date', [None])[0]
-        print(telegram_hash)
-        # Step 1: Verify request time
-        if time.time() - int(auth_date) > 86400:  # 24 hours
-            return Response({'error': 'Authentication expired'}, status=status.HTTP_403_FORBIDDEN)
-
-        # Step 2: Generate data_check_string
-        data_check_string = "\n".join([f"{k}={v}" for k, v in sorted(parsed_data.items()) if k != 'hash'])
+        query_params = dict(x.split('=') for x in init_data.split('&'))
         
-        # Step 3: Calculate the secret key using your bot token
+        # Xác thực dữ liệu Telegram
+        auth_date = int(query_params['auth_date'])
+        if time.time() - auth_date > 86400:
+            return Response({"error": "Auth date expired."}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        check_hash = query_params['hash']
         TELEGRAM_BOT_TOKEN = "5882917777:AAEaS1T9NJ64Q0nQ-uEf3-XEmvJeTLAtgeg"
-        secret_key = hashlib.sha256(TELEGRAM_BOT_TOKEN.encode('utf-8')).digest()
+        secret_key = hmac.new(key=TELEGRAM_BOT_TOKEN.encode(), msg=b'WebAppData', digestmod=hashlib.sha256).digest()
+        data_check_string = '\n'.join(f'{k}={v}' for k, v in sorted(query_params.items()) if k != 'hash')
+        calculated_hash = hmac.new(secret_key, msg=data_check_string.encode(), digestmod=hashlib.sha256).hexdigest()
         
-        # Step 4: Calculate the hash
-        calculated_hash = hmac.new(secret_key, data_check_string.encode('utf-8'), hashlib.sha256).hexdigest()
+        if check_hash != calculated_hash:
+            return Response({"error": "Invalid data hash."}, status=status.HTTP_401_UNAUTHORIZED)
         
-        # Step 5: Compare calculated hash with the provided hash
-        if calculated_hash != telegram_hash:
-            return Response({'error': 'Invalid hash'}, status=status.HTTP_403_FORBIDDEN)
+        # Tạo hoặc lấy user
+        telegram_id = query_params['user[id]']
+        username = query_params['user[username]']
+        first_name = query_params['user[first_name]']
+        last_name = query_params['user[last_name]']
         
-        # Step 6: Get or create the user
-        telegram_id = parsed_data.get('id')[0]
-        first_name = parsed_data.get('first_name')[0]
-        last_name = parsed_data.get('last_name', '')[0]
-        username = parsed_data.get('username', '')[0]
-
-        user, created = User.objects.get_or_create(
-            username=username,
-            defaults={'first_name': first_name, 'last_name': last_name, 'email': '', 'password': ''}
-        )
-
-        # Step 7: Generate JWT token using SimpleJWT
+        user, created = User.objects.get_or_create(username=username, defaults={
+            'first_name': first_name,
+            'last_name': last_name,
+            'password': User.objects.make_random_password(),
+        })
+        
+        # Phát JWT
         refresh = RefreshToken.for_user(user)
-        access_token = str(refresh.access_token)
-        refresh_token = str(refresh)
-
         return Response({
-            'access_token': access_token,
-            'refresh_token': refresh_token,
-        }, status=status.HTTP_200_OK, content_type='application/json')
-    
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+        }, status=status.HTTP_200_OK)
 from django.shortcuts import render
 
 def index(request):
