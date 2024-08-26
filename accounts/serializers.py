@@ -48,20 +48,14 @@ class TelegramAuthSerializer(serializers.Serializer):
         allowed_keys = {'id', 'first_name', 'last_name', 'username', 'auth_date', 'hash'}
         return {key: value for key, value in data.items() if key in allowed_keys}
     
-
 from rest_framework import serializers
 from .models import User
 
-class SignInDtoSerializer(serializers.Serializer):
+class SignInSerializer(serializers.Serializer):
     initData = serializers.CharField()
     refCode = serializers.CharField()
 
-class CreateUserDtoSerializer(serializers.ModelSerializer):
+class CreateUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id_telegram', 'username', 'first_name', 'last_name', 'referral_code']
-
-class UpdateUserDtoSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ['wallet', 'age_wallet', 'age_telegram', 'balance_sniff_point', 'balance_sniff_coin', 'refresh_token']
+        fields = '__all__'
