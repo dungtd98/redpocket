@@ -28,39 +28,38 @@ class GetUserProfileView(APIView):
                 "first_name": request.user.first_name,
                 "last_name": request.user.last_name,
                 "balance_sniff_point": wallet.sniff_point,
-                "balance_sniff_point_ath": 0,  # Example static value
+                "balance_sniff_point_ath": 0, 
                 "balance_sniff_coin": wallet.sniff_coin,
-                "balance_scratch_card": 0,  # Example static value
-                "balance_usdt": "0.00",  # Example static value
-                "trigger_up_level": False,  # Example static value
+                "balance_scratch_card": 0, 
+                "balance_usdt": "0.00", 
+                "trigger_up_level": False, 
                 "referral_code": request.user.referral_code,
-                "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NCwiaWRfdGVsZWdyYW0iOjU5NjQxODQzMDksImlhdCI6MTcyNDY1ODU5OCwiZXhwIjoxNzI5ODQyNTk4fQ.feCY37ptXTbe5WKp9R2oRGawmrPGuCiC8bOIHAxxrRA",  # Example static value
-                "wallet": None,  # Example static value
-                "network": None,  # Example static value
-                "age_wallet": None,  # Example static value
-                "age_telegram": None,  # Example static value
-                "level_id_old": 0,  # Example static value
-                "level_id": 0,  # Example static value
-                "claim_expire": None,  # Example static value
+                "wallet": None, 
+                "network": None, 
+                "age_wallet": None, 
+                "age_telegram": None, 
+                "level_id_old": 0, 
+                "level_id": 0, 
+                "claim_expire": request.user.claim_expire.isoformat() if request.user.claim_expire else None, 
                 "level": {
-                    "id": 1,  # Example static value
-                    "created_at": "2024-08-26T07:09:24.978Z",  # Example static value
-                    "updated_at": "2024-08-26T07:09:24.978Z",  # Example static value
-                    "level_number": 0,  # Example static value
-                    "level_name": "Level 0",  # Example static value
-                    "require_balance": 0,  # Example static value
-                    "cost_level_up": 0,  # Example static value
-                    "boost": 5,  # Example static value
-                    "send_envelope": 1  # Example static value
+                    "id": 1, 
+                    "created_at": "2024-08-26T07:09:24.978Z", 
+                    "updated_at": "2024-08-26T07:09:24.978Z", 
+                    "level_number": 0, 
+                    "level_name": "Level 0", 
+                    "require_balance": 0, 
+                    "cost_level_up": 0, 
+                    "boost": 5, 
+                    "send_envelope": 1 
                 },
-                "histories_open_coin_pouchs": [],  # Example static value
-                "histories_send_coin_pouchs": [],  # Example static value
-                "createdCountPouchToday": 0,  # Example static value
-                "openedCountPouchToday": 0,  # Example static value
-                "createdCountPouch": 0,  # Example static value
-                "trigger_up_level_data": None,  # Example static value
-                "limitAmountCoinPouchToday": 100000,  # Example static value
-                "totalAmountPouchToday": 0  # Example static value
+                "histories_open_coin_pouchs": [], 
+                "histories_send_coin_pouchs": [], 
+                "createdCountPouchToday": 0, 
+                "openedCountPouchToday": 0, 
+                "createdCountPouch": 0, 
+                "trigger_up_level_data": None, 
+                "limitAmountCoinPouchToday": 100000, 
+                "totalAmountPouchToday": 0 
             },
             "message": "GET_INFOR_USER_SUCCESSFULLY"
         }

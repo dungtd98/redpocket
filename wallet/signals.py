@@ -1,7 +1,7 @@
 from django.db.models.signals import post_save
 from django.contrib.auth import get_user_model
 from django.dispatch import receiver
-from .models import Wallet, UserStake
+from .models import Wallet, UserStake, UserLevel
 
 User = get_user_model()
 
@@ -9,6 +9,7 @@ User = get_user_model()
 def create_user_wallet(sender, instance, created, **kwargs):
     if created:
         Wallet.objects.create(user=instance, sniff_coin=0)
+        UserLevel.objects.create(user=instance, level_number=0, level_name="Level 0")
 
 
 @receiver(post_save, sender=UserStake)

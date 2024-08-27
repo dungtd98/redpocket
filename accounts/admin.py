@@ -6,9 +6,9 @@ from .models import CustomUser
 class UserAdmin(BaseUserAdmin):
     fieldsets = (
         (None, {'fields': ('username', 'password')}),
-        ('Personal info', {'fields': ('telegram_id', 'user_level', 'daily_limit_open_pouch', 'daily_limit_share_pouch')}),
+        ('Personal info', {'fields': ('telegram_id', 'daily_limit_open_pouch', 'daily_limit_share_pouch')}),
         ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
-        ('Important dates', {'fields': ('last_login',)}),
+        ('Important dates', {'fields': ('last_login','claim_expire')}),
     )
     add_fieldsets = (
         (None, {
@@ -16,7 +16,7 @@ class UserAdmin(BaseUserAdmin):
             'fields': ('username', 'password1', 'password2'),
         }),
     )
-    list_display = ('username', 'telegram_id', 'user_level', 'is_staff')
+    list_display = ('username', 'telegram_id', 'is_staff')
     search_fields = ('username', 'telegram_id')
     ordering = ('username',)
 

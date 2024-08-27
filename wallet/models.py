@@ -9,7 +9,7 @@ User = get_user_model()
 class Wallet(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='wallet')
     user_wallet_id = models.CharField(max_length=255, unique=True, blank=True, null=True)
-    sniff_coin = models.DecimalField(max_digits=10, decimal_places=2, default=100.0)
+    sniff_coin = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     sniff_point = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     cards = models.IntegerField(default=0)
     def __str__(self):
@@ -18,7 +18,7 @@ class Wallet(models.Model):
 class GiveawayPouch(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='giveaway_pouch')
-    sniff_coin = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     expired_date = models.DateTimeField(blank=True, null=True)
     
     def save(self, *args, **kwargs):
@@ -50,3 +50,18 @@ class Task(models.Model):
     
     def __str__(self):
         return self.task_name 
+    
+
+class UserLevel(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='user_level')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    level_number = models.IntegerField(default=0)
+    level_name = models.CharField(max_length=255)
+    require_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
+    cost_level_up = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
+    boost = models.IntegerField(default=0)
+    send_envelope = models.IntegerField(default=0)
+
+    def __str__(self):
+        return self.level_name

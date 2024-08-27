@@ -3,11 +3,13 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from .serializers import GiveawayPouchSerializer, UserStakeSerializer, TaskSerializer
-from .models import GiveawayPouch, Wallet, UserStake, Task
+from .models import GiveawayPouch, Wallet, UserStake, Task, UserLevel
 from .ultis import *
 import json
 from django.utils import timezone
 from .tasks import add_tokens_to_user
+from datetime import timedelta
+
 
 class CreateGiveawayPouchView(APIView):
     def post(self, request, format=None):
@@ -18,14 +20,14 @@ class CreateGiveawayPouchView(APIView):
         if not can_share_pouch:
             return Response({"message": "You have reached the daily limit of opening pouch."}, status=status.HTTP_400_BAD_REQUEST)
         if serializer.is_valid():
-            pouch_sniff_coin = serializer.validated_data.get("sniff_coin")
+            pouch_sniff_coin = serializer.validated_data.get("amount")
             
             pouch_coin_array = json.dumps({"values_array": divide_into_percentage_array(pouch_sniff_coin)})
             serializer.save()
             redis_key_name = f"giveaway_pouch_{serializer.data.get('id')}"
             redis_value = json.dumps({
                 "values_array": pouch_coin_array,
-                "init_value": pouch_sniff_coin
+                "init_value": int(pouch_sniff_coin)
             })
             save_to_redis(redis_key_name, redis_value, 1800)
             add_tokens_to_user.apply_async(args=[request.user.id, serializer.data.get('id')], countdown=1800)
@@ -75,14 +77,20 @@ class GetPouchListInfoView(APIView):
 
         response_data = []
         for pouch in sent_pouches:
+            redis_data = get_from_redis(f"giveaway_pouch_{pouch.id}")
+            if redis_data:
+                values_array = json.loads(redis_data).get("values_array", [])
+            else:
+                values_array = []
+
             pouch_data = {
                 "id": pouch.id,
-                "amount": pouch.sniff_coin,
-                "amount_claim": sum(json.loads(get_from_redis(f"claim_pouch_{pouch.id}_{user.id}")) for user in pouch.user.all()),
+                "amount": pouch.amount,
+                "amount_claim": 0,
                 "owner_id": pouch.user.id,
                 "status": "OPEN" if pouch.expired_date > timezone.now() else "CLAIM",
                 "time_end": pouch.expired_date.isoformat(),
-                "opened": len(json.loads(get_from_redis(f"giveaway_pouch_{pouch.id}")).get("values_array", []))
+                "opened": len(values_array)
             }
             response_data.append(pouch_data)
 
@@ -93,17 +101,10 @@ class GetPouchListInfoView(APIView):
                 "amount_claim": unopened_pouch['amount_claim'],
                 "owner_id": unopened_pouch['owner_id'],
                 "status": unopened_pouch['status'],
-                "time_end": unopened_pouch['time_end'],
-                "opened": unopened_pouch['opened']
             }
             response_data.append(pouch_data)
 
-        response = {
-            "statusCode": 200,
-            "message": "Success",
-            "data": response_data
-        }
-        return Response(response, status=status.HTTP_200_OK)
+        return Response(response_data, status=status.HTTP_200_OK)
     
 
 class CreateStakeView(APIView):
@@ -129,21 +130,62 @@ class GetActiveTaskView(APIView):
 class ClaimNewUserAPIView(APIView):
     def post(self, request, *args, **kwargs):
         wallet = Wallet.objects.get(user=request.user)
-        wallet.sniff_coin += 100
+        wallet.sniff_point += 100
         wallet.save()
-
+        user_level = UserLevel.objects.get(user=request.user)
+        request.user.claim_expire = timezone.now() + timedelta(minutes=30)
+        request.user.save()
         user_data = {
             "id": request.user.id,
-            "name": f"{request.user.first_name} {request.user.last_name}",
-            "wallet": wallet.user_wallet_id,
-            "balance_sniff_coin": wallet.sniff_coin,
-            "balance_sniff_point": wallet.sniff,
-            "claim_expire": "2023-12-31T23:59:59Z",  # Example static date
-            "createdCountPouch": 0,  # Example static value
-            "createdCountPouchToday": 0,  # Example static value
+            "created_at": request.user.date_joined.isoformat(),
+            "updated_at": request.user.last_login.isoformat() if request.user.last_login else None,
+            "id_telegram": request.user.telegram_id,
+            "username": request.user.username,
+            "first_name": request.user.first_name,
+            "last_name": request.user.last_name,
+            "balance_sniff_point": wallet.sniff_point,
+            "balance_sniff_point_ath": wallet.sniff_point,  
+            "balance_sniff_coin": str(wallet.sniff_coin),
+            "balance_scratch_card": 0,  
+            "balance_usdt": "0.00",  
+            "trigger_up_level": False,  
+            "referral_code": request.user.referral_code,
+            "refresh_token": "ABCD",  
+            "wallet": None,  
+            "network": None,  
+            "age_wallet": None,  
+            "age_telegram": None,  
+            "level_id_old": 0,  
+            "level_id": 0,  
+            "claim_expire": request.user.claim_expire.isoformat() if request.user.claim_expire else None,
             "level": {
-                "send_envelope": 5  # Example static value
-            }
+                "id": user_level.id,
+                "created_at": user_level.created_at.isoformat(),
+                "updated_at": user_level.updated_at.isoformat(),
+                "level_number": user_level.level_number,
+                "level_name": user_level.level_name,
+                "require_balance": user_level.require_balance,
+                "cost_level_up": user_level.cost_level_up,
+                "boost": user_level.boost,
+                "send_envelope": user_level.send_envelope
+            },
+            "histories_open_coin_pouchs": [],  
+            "histories_send_coin_pouchs": [],  
+            "createdCountPouchToday": 0,  
+            "openedCountPouchToday": 0,  
+            "createdCountPouch": 0,  
+            "trigger_up_level_data": None,  
+            "limitAmountCoinPouchToday": 100000,  
+            "totalAmountPouchToday": 0  
         }
 
-        return Response({"data":{"user": user_data}}, status=status.HTTP_200_OK)
+        response = {
+            "status": "SUCCESS",
+            "statusCode": 200,
+            "data": {
+                "user": user_data
+            },
+            "message": "CLAIM_NEW_USER_SUCCESSFULLY"
+        }
+
+        return Response(response, status=status.HTTP_200_OK)

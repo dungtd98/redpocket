@@ -26,7 +26,6 @@ class CustomUserManager(BaseUserManager):
 class CustomUser(AbstractBaseUser, PermissionsMixin):
     username = models.CharField(unique=True, max_length=255)
     telegram_id = models.CharField(max_length=255, blank=True, null=True)
-    user_level = models.IntegerField(default=1)
     daily_limit_open_pouch = models.IntegerField(default=1)
     daily_limit_share_pouch = models.IntegerField(default=1)
     is_active = models.BooleanField(default=True)
@@ -36,7 +35,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     date_joined = models.DateTimeField(auto_now_add=True)
     referral_code = models.CharField(max_length=70, blank=True, null=True)
     objects = CustomUserManager()
-
+    claim_expire = models.DateTimeField(blank=True, null=True)
     USERNAME_FIELD = 'username'
     REQUIRED_FIELDS = []
 
