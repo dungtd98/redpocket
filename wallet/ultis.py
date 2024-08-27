@@ -62,6 +62,7 @@ def can_open_pouch(user):
     today = timezone.now().strftime('%Y-%m-%d')
     redis_key = f'open_pouch_{user.id}_{today}' 
     open_count = int(get_from_redis(redis_key)) or 0
+    print(open_count)
     if open_count < user.daily_limit_open_pouch:
         open_count += 1
         save_to_redis(redis_key, open_count, 86400) 

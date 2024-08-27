@@ -87,10 +87,14 @@ class GetPouchListInfoView(APIView):
                 "id": pouch.id,
                 "amount": pouch.amount,
                 "amount_claim": 0,
+                "amount_claim_view": pouch.amount,  # Add this line
                 "owner_id": pouch.user.id,
-                "status": "OPEN" if pouch.expired_date > timezone.now() else "CLAIM",
+                "status": "OPEN" if pouch.expired_date > timezone.now() else "CLOSE",  # Update status to "CLOSE"
                 "time_end": pouch.expired_date.isoformat(),
-                "opened": len(values_array)
+                "created_at": pouch.created_at.isoformat(),  # Add this line
+                "updated_at": pouch.updated_at.isoformat(),  # Add this line
+                "opened": len(values_array),
+                "histories_coin_pouchs": []  # Add this line
             }
             response_data.append(pouch_data)
 
@@ -99,12 +103,23 @@ class GetPouchListInfoView(APIView):
                 "id": unopened_pouch['id'],
                 "amount": unopened_pouch['amount'],
                 "amount_claim": unopened_pouch['amount_claim'],
+                "amount_claim_view": unopened_pouch['amount'],  # Add this line
                 "owner_id": unopened_pouch['owner_id'],
                 "status": unopened_pouch['status'],
+                "created_at": unopened_pouch['created_at'],  # Add this line
+                "updated_at": unopened_pouch['updated_at'],  # Add this line
+                "histories_coin_pouchs": []  # Add this line
             }
             response_data.append(pouch_data)
 
-        return Response(response_data, status=status.HTTP_200_OK)
+        response = {
+            "status": "SUCCESS",
+            "statusCode": 200,
+            "message": "GET_COIN_POUCH_SUCCESSFULLY",
+            "data": response_data
+        }
+
+        return Response(response, status=status.HTTP_200_OK)
     
 
 class CreateStakeView(APIView):
