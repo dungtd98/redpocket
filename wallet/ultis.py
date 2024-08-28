@@ -58,11 +58,11 @@ def get_values_with_key_pattern(pattern):
 def delete_from_redis(key):
     r.delete(key)
 
-def can_open_pouch(user):
+def check_can_open_pouch(user):
     today = timezone.now().strftime('%Y-%m-%d')
     redis_key = f'open_pouch_{user.id}_{today}' 
-    open_count = int(get_from_redis(redis_key)) or 0
-    print(open_count)
+    open_count = get_from_redis(redis_key) or 0
+    open_count = int(open_count)
     if open_count < user.daily_limit_open_pouch:
         open_count += 1
         save_to_redis(redis_key, open_count, 86400) 
@@ -70,11 +70,12 @@ def can_open_pouch(user):
     return False  
 
 
-def can_share_pouch(user):
+def check_can_share_pouch(user):
     today = timezone.now().strftime('%Y-%m-%d') 
     redis_key = f'share_pouch_{user.id}_{today}'
     share_count = get_from_redis(redis_key) or 0
-    if share_count < user.userprofile.daily_limit_share_pouch:
+    share_count = int(share_count)
+    if share_count < user.daily_limit_share_pouch:
         share_count += 1
         save_to_redis(redis_key, share_count, 86400)
         return True 

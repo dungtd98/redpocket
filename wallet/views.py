@@ -16,7 +16,7 @@ class CreateGiveawayPouchView(APIView):
         data = request.data.copy()
         data['user'] = request.user.id
         serializer = GiveawayPouchSerializer(data=data)
-        can_share_pouch = can_open_pouch(request.user)
+        can_share_pouch = check_can_share_pouch(request.user)
         if not can_share_pouch:
             return Response({"message": "You have reached the daily limit of opening pouch."}, status=status.HTTP_400_BAD_REQUEST)
         if serializer.is_valid():
@@ -31,7 +31,22 @@ class CreateGiveawayPouchView(APIView):
             })
             save_to_redis(redis_key_name, redis_value, 1800)
             add_tokens_to_user.apply_async(args=[request.user.id, serializer.data.get('id')], countdown=1800)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+            response_data = {
+                "status": "SUCCESS",
+                "statusCode": 200,
+                "data": {
+                    "owner_id": serializer.data.get('user'),
+                    "amount": serializer.data.get('amount'),
+                    "time_end": (timezone.now() + timedelta(minutes=30)).isoformat(),
+                    "id": serializer.data.get('id'),
+                    "created_at": serializer.data.get('created_at'),
+                    "updated_at": serializer.data.get('updated_at'),
+                    "status": "OPENED"
+                },
+                "message": "CREATE_COIN_POUCH_SUCCESSFULLY"
+            }
+            return Response(response_data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -40,7 +55,7 @@ class ClaimPouchTokenView(APIView):
         """
         This API for open pouch and get random sniff coin
         """
-        can_open_pouch = can_open_pouch(request.user)
+        can_open_pouch = check_can_open_pouch(request.user)
         if not can_open_pouch:
             return Response({"message": "You have reached the daily limit of opening pouch."}, status=status.HTTP_400_BAD_REQUEST)
         pouch_id = request.query_params.get('pouch_id')

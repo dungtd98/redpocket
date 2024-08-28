@@ -36,8 +36,17 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     referral_code = models.CharField(max_length=70, blank=True, null=True)
     objects = CustomUserManager()
     claim_expire = models.DateTimeField(blank=True, null=True)
+    referral_code = models.CharField(max_length=10, unique=True, blank=True, null=True)
+    
     USERNAME_FIELD = 'username'
     REQUIRED_FIELDS = []
+    def save(self, *args, **kwargs):
+        if not self.referral_code:
+            print("Generating referral code")
+            self.referral_code = self.generate_refcode()
+        super().save(*args, **kwargs)
 
+    def generate_refcode(self):
+        return str(uuid.uuid4())[:8]
     def __str__(self):
         return self.username
