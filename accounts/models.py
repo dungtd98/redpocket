@@ -33,7 +33,6 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     first_name = models.CharField(max_length=255, blank=True, null=True)
     last_name = models.CharField(max_length=255, blank=True, null=True)
     date_joined = models.DateTimeField(auto_now_add=True)
-    referral_code = models.CharField(max_length=70, blank=True, null=True)
     objects = CustomUserManager()
     claim_expire = models.DateTimeField(blank=True, null=True)
     referral_code = models.CharField(max_length=10, unique=True, blank=True, null=True)

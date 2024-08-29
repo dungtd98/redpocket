@@ -16,7 +16,6 @@ class Wallet(models.Model):
         return f'{self.user.username} Wallet'
     
 class GiveawayPouch(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='giveaway_pouch')
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     expired_date = models.DateTimeField(blank=True, null=True)
@@ -32,8 +31,20 @@ class GiveawayPouch(models.Model):
 
 class UserStake(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    end_datetime = models.DateTimeField(blank=True, null=True)
-    sniff_coin_stake_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
+    end_time = models.DateTimeField(blank=True, null=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_claim = models.DateTimeField(blank=True, null=True, )
+    earning = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
+    STATUS_CHOICES = (
+        ('active', 'Active'),
+        ('inactive', 'Inactive'),
+    )
+    status = models.CharField(max_length=255, choices=STATUS_CHOICES, default='active')
+    start_time = models.DateTimeField(blank=True, null=True, auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    def __str__(self):
+        return f'{self.user.username} Stake'
     
 
 class DailyStake(models.Model):

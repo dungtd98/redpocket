@@ -12,9 +12,11 @@ def create_user_wallet(sender, instance, created, **kwargs):
         UserLevel.objects.create(user=instance, level_number=0, level_name="Level 0")
 
 
+from decimal import Decimal
+
 @receiver(post_save, sender=UserStake)
 def create_user_stake(sender, instance:UserStake, created, **kwargs):
     user_wallet = Wallet.objects.get(user=instance.user)
-    user_wallet.sniff_coin -= instance.sniff_coin_stake_amount
+    user_wallet.sniff_coin -= Decimal(str(instance.amount/10))
     user_wallet.save()
 

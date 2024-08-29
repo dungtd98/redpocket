@@ -8,7 +8,7 @@ from wallet.serializers import WalletSerializer
 from .serializers import TelegramAuthSerializer
 import urllib.parse
 import json
-
+from .ultis import count_open_pouch, count_share_pouch
 User = get_user_model()
 
 
@@ -54,9 +54,9 @@ class GetUserProfileView(APIView):
                 },
                 "histories_open_coin_pouchs": [], 
                 "histories_send_coin_pouchs": [], 
-                "createdCountPouchToday": 0, 
-                "openedCountPouchToday": 0, 
-                "createdCountPouch": 0, 
+                "createdCountPouchToday": count_share_pouch(request.user), 
+                "openedCountPouchToday": count_open_pouch(request.user), 
+                "createdCountPouch": request.user.daily_limit_share_pouch, 
                 "trigger_up_level_data": None, 
                 "limitAmountCoinPouchToday": 100000, 
                 "totalAmountPouchToday": 0 

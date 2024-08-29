@@ -141,16 +141,45 @@ class CreateStakeView(APIView):
     def post(self, request, *args, **kwargs):
         data = request.data.copy()
         data['user'] = request.user.id
+        duration = data.get('duration', 7)
+        data['end_time'] = timezone.now() + timedelta(days=duration)
+        data['earning'] = 0
         serializer = UserStakeSerializer(data=data)
         if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            stake = serializer.save()
+            response_data = {
+                "data": {
+                    "amount_staked": stake.amount,
+                    "created_at": stake.created_at.isoformat(),
+                    "earnings": 0,
+                    "end_time": stake.end_time.isoformat() if stake.end_time else None,
+                    "end_time_stake": stake.end_time.isoformat(),
+                    "id": stake.id,
+                    "last_claim": stake.last_claim.isoformat() if stake.last_claim else None,
+                    "start_time": stake.start_time.isoformat(),
+                    "status": stake.status,
+                    "updated_at": stake.updated_at.isoformat(),
+                    "user_id": stake.user.id
+                },
+                "message": "Stake created successfully",
+                "status": "SUCCESS",
+                "statusCode": 201
+            }
+            return Response(response_data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class GetActiveStakeView(APIView):
     def get(self, request, *args, **kwargs):
-        active_stakes = UserStake.objects.filter(end_datetime__gt=timezone.now())
-        return Response(UserStakeSerializer(active_stakes, many=True).data, status=status.HTTP_200_OK)
+        active_stakes = UserStake.objects.get(user=request.user, status='active')
+        serialized_data = UserStakeSerializer(active_stakes).data
+        serialized_data["earnings"] = request.user.wallet.sniff_coin * 10
+        response_data = {
+            "data": serialized_data if serialized_data else None,
+            "message": "Get info stake successfully",
+            "status": "SUCCESS",
+            "statusCode": 200
+        }
+        return Response(response_data, status=status.HTTP_200_OK)
 
 class GetActiveTaskView(APIView):
     def get(self, request, *args, **kwargs):

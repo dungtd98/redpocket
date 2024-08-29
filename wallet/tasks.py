@@ -32,21 +32,16 @@ def shared_daily_stake():
     daily_stake = DailyStake.objects.get(date=today)
     now = timezone.now()
     end_of_today = now.replace(hour=23, minute=59)
-
-    # Lọc các UserStake có end_datetime sau thời điểm cuối ngày hôm nay
     active_stakes = UserStake.objects.filter(end_datetime__gt=end_of_today)
-
-    # Tính tổng số sniff_coin_stake_amount của các UserStake đang active
     total_active_stake_coin = active_stakes.aggregate(total=Sum('sniff_coin_stake_amount'))['total'] or 0
 
     if total_active_stake_coin > 0:
-        # Tính tỷ lệ cho từng user và annotate kết quả vào queryset
         active_stakes_with_ratio = active_stakes.annotate(
             stake_ratio=F('sniff_coin_stake_amount') / total_active_stake_coin
         )
 
         for stake in active_stakes_with_ratio:
             user_stake_ratio = stake.stake_ratio 
-            user_wallet = Wallet.objects.get(user=stake.user)
-            user_wallet.sniff_coin += daily_stake.daily_sniff * user_stake_ratio
-            user_wallet.save()
+            user_stake= UserStake.objects.get(user=stake.user)
+            user_stake.earning += daily_stake.daily_sniff * user_stake_ratio
+            user_stake.save()
