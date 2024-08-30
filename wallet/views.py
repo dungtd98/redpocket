@@ -12,7 +12,7 @@ from datetime import timedelta
 
 
 class CreateGiveawayPouchView(APIView):
-    def post(self, request, format=None):
+    def post(self, request):
         data = request.data.copy()
         data['user'] = request.user.id
         serializer = GiveawayPouchSerializer(data=data)
@@ -22,7 +22,7 @@ class CreateGiveawayPouchView(APIView):
         if serializer.is_valid():
             pouch_sniff_coin = serializer.validated_data.get("amount")
             
-            pouch_coin_array = json.dumps({"values_array": divide_into_percentage_array(pouch_sniff_coin)})
+            pouch_coin_array = divide_into_percentage_array(pouch_sniff_coin)
             serializer.save()
             redis_key_name = f"giveaway_pouch_{serializer.data.get('id')}"
             redis_value = json.dumps({
@@ -50,46 +50,57 @@ class CreateGiveawayPouchView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+
 class ClaimPouchTokenView(APIView):
-    def get(self, request, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
         """
-        This API for open pouch and get random sniff coin
+        Handles the HTTP POST request for opening a pouch.
+        Args:
+            request: The HTTP request object.
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
+        Returns:
+            A Response object with the result of the pouch opening.
         """
+        # Code implementation goes here
         can_open_pouch = check_can_open_pouch(request.user)
         if not can_open_pouch:
             return Response({"message": "You have reached the daily limit of opening pouch."}, status=status.HTTP_400_BAD_REQUEST)
-        pouch_id = request.query_params.get('pouch_id')
+        
+        pouch_id = request.data.get('idCoinPouch')
         pouch = GiveawayPouch.objects.get(id=pouch_id)
         pouch_expired_date = pouch.expired_date
+        
         if pouch_expired_date < timezone.now():
             return Response({"message": "This pouch has expired."}, status=status.HTTP_400_BAD_REQUEST)
         pouch_coin_value = json.loads(get_from_redis(f"giveaway_pouch_{pouch_id}"))
-        pouch_coin_array = pouch_coin_value.get("values_array")
+        pouch_coin_array = pouch_coin_value["values_array"]
+        print(pouch_coin_array)
+        if isinstance(pouch_coin_array, str):
+            pouch_coin_array = json.loads(pouch_coin_array)
         coin_value, pouch_coin_array = get_random_value_from_array(pouch_coin_array)
         pouch_coin_value["values_array"] = pouch_coin_array
-        save_to_redis(f"giveaway_pouch_{pouch_id}", pouch_coin_value, 86400)
-        save_to_redis(f"claim_pouch_{pouch_id}_{request.user.id}", coin_value, 86400)
-        return Response(pouch_coin_array, status=status.HTTP_200_OK)
-
-    def post(self, request, *args, **kwargs):
-        """
-        This API handle claim sniff coin from pouch
-        """
-        pouch_id = request.data.get('pouch_id')
-        claimed_coin = get_from_redis(f"claim_pouch_{pouch_id}_{request.user.id}")
-        if claimed_coin is None:
-            return Response({"message": "You have either not claimed any coin from this pouch or the pouch has expired."}, status=status.HTTP_400_BAD_REQUEST)
-        wallet = Wallet.objects.get(user=request.user)
-        wallet.sniff_coin += claimed_coin
-        wallet.save()
-        return Response({"message": f"You have successfully claimed {claimed_coin} sniff coin from the pouch."}, status=status.HTTP_200_OK)
+        save_to_redis(f"giveaway_pouch_{pouch_id}", json.dumps(pouch_coin_value), 86400)
+        claim_value = {
+            "id": timezone.now().timestamp(),
+            "amount": coin_value,
+            "amount_claim": coin_value,
+            "amount_claim_view": coin_value,
+            "owner_id": request.user.id,
+            "status": "OPEN",
+            "created_at": timezone.now().isoformat(),
+            "updated_at": timezone.now().isoformat(),
+            "histories_coin_pouchs": []
+        }
+        save_to_redis(f"claim_pouch_{pouch_id}_{request.user.id}", json.dumps(claim_value), 86400)
+        return Response({"coin_value": coin_value}, status=status.HTTP_200_OK)
 
 
 class GetPouchListInfoView(APIView):
     def get(self, request, *args, **kwargs):
         sent_pouches = GiveawayPouch.objects.filter(user=request.user)
         unopened_pouches = get_values_with_key_pattern(f"claim_pouch_*_{request.user.id}")
-
+        print(type(unopened_pouches))
         response_data = []
         for pouch in sent_pouches:
             redis_data = get_from_redis(f"giveaway_pouch_{pouch.id}")
@@ -114,6 +125,7 @@ class GetPouchListInfoView(APIView):
             response_data.append(pouch_data)
 
         for unopened_pouch in unopened_pouches:
+            unopened_pouch = json.loads(unopened_pouch)
             pouch_data = {
                 "id": unopened_pouch['id'],
                 "amount": unopened_pouch['amount'],
@@ -139,9 +151,26 @@ class GetPouchListInfoView(APIView):
 
 class CreateStakeView(APIView):
     def post(self, request, *args, **kwargs):
+        """
+        API endpoint for creating a stake.
+
+        Parameters:
+        - request: The HTTP request object.
+        - args: Additional positional arguments.
+        - kwargs: Additional keyword arguments.
+
+        Returns:
+        - If the serializer is valid, returns a response with the created stake data and a success message.
+        - If the serializer is not valid, returns a response with the serializer errors and a bad request status.
+
+        Example Usage:
+        response = post(request, *args, **kwargs)
+        """
         data = request.data.copy()
         data['user'] = request.user.id
-        duration = data.get('duration', 7)
+        duration = data.get('duration', None)
+        if not duration:
+            return Response({"duration": ["This field is required."]}, status=status.HTTP_400_BAD_REQUEST)
         data['end_time'] = timezone.now() + timedelta(days=duration)
         data['earning'] = 0
         serializer = UserStakeSerializer(data=data)
@@ -168,9 +197,10 @@ class CreateStakeView(APIView):
             return Response(response_data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
 class GetActiveStakeView(APIView):
     def get(self, request, *args, **kwargs):
-        active_stakes = UserStake.objects.get(user=request.user, status='active')
+        active_stakes = UserStake.objects.get(user=request.user)
         serialized_data = UserStakeSerializer(active_stakes).data
         serialized_data["earnings"] = request.user.wallet.sniff_coin * 10
         response_data = {
@@ -180,6 +210,7 @@ class GetActiveStakeView(APIView):
             "statusCode": 200
         }
         return Response(response_data, status=status.HTTP_200_OK)
+
 
 class GetActiveTaskView(APIView):
     def get(self, request, *args, **kwargs):

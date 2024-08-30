@@ -2,7 +2,7 @@ from django.urls import path
 from .views import CreateGiveawayPouchView, ClaimPouchTokenView, GetPouchListInfoView, CreateStakeView, GetActiveStakeView, ClaimNewUserAPIView
 
 urlpatterns = [
-    path('coin-pouch/create', CreateGiveawayPouchView.as_view(), name='create-giveaway-pouch'),
+    path('coin-pouch/create', CreateGiveawayPouchView.as_view(), name='create_giveaway_pouch'),
     path('coin-pouch/open', ClaimPouchTokenView.as_view(), name='claim-pouch-token'),
     path('coin-pouch', GetPouchListInfoView.as_view(), name='get-pouch-list-info'),
     path('stakes', CreateStakeView.as_view(), name='create-stake'),
