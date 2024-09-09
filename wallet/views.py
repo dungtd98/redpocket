@@ -50,7 +50,6 @@ class CreateGiveawayPouchView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-
 class ClaimPouchTokenView(APIView):
     def post(self, request, *args, **kwargs):
         """
@@ -62,7 +61,6 @@ class ClaimPouchTokenView(APIView):
         Returns:
             A Response object with the result of the pouch opening.
         """
-        # Code implementation goes here
         can_open_pouch = check_can_open_pouch(request.user)
         if not can_open_pouch:
             return Response({"message": "You have reached the daily limit of opening pouch."}, status=status.HTTP_400_BAD_REQUEST)
@@ -73,14 +71,16 @@ class ClaimPouchTokenView(APIView):
         
         if pouch_expired_date < timezone.now():
             return Response({"message": "This pouch has expired."}, status=status.HTTP_400_BAD_REQUEST)
+        
         pouch_coin_value = json.loads(get_from_redis(f"giveaway_pouch_{pouch_id}"))
         pouch_coin_array = pouch_coin_value["values_array"]
-        print(pouch_coin_array)
         if isinstance(pouch_coin_array, str):
             pouch_coin_array = json.loads(pouch_coin_array)
+        
         coin_value, pouch_coin_array = get_random_value_from_array(pouch_coin_array)
         pouch_coin_value["values_array"] = pouch_coin_array
         save_to_redis(f"giveaway_pouch_{pouch_id}", json.dumps(pouch_coin_value), 86400)
+        
         claim_value = {
             "id": timezone.now().timestamp(),
             "amount": coin_value,
@@ -93,7 +93,65 @@ class ClaimPouchTokenView(APIView):
             "histories_coin_pouchs": []
         }
         save_to_redis(f"claim_pouch_{pouch_id}_{request.user.id}", json.dumps(claim_value), 86400)
-        return Response({"coin_value": coin_value}, status=status.HTTP_200_OK)
+        
+        response_data = {
+            "status": "SUCCESS",
+            "statusCode": 200,
+            "message": "OPEN_COIN_POUCH_SUCCESSFULLY",
+            "data": {
+                "coinPouch": {
+                    "id": pouch.id,
+                    "amount": pouch.amount,
+                    "created_at": pouch.created_at.isoformat(),
+                    "histories_coin_pouchs": [
+                        {
+                            "id": claim_value["id"],
+                            "isFirst": True,
+                            "owner": {
+                                "age_telegram": 1,
+                                "age_wallet": 0,
+                                "balance_scratch_card": 15,
+                                "balance_sniff_coin": str(coin_value),
+                                "balance_sniff_point": 2000,
+                                "balance_usdt": "0.00",
+                                "claim_expire": (timezone.now() + timedelta(minutes=30)).isoformat(),
+                                "country": None,
+                                "created_at": request.user.date_joined.isoformat(),
+                                "first_name": request.user.first_name,
+                                "id": request.user.id,
+                                "id_telegram": request.user.telegram_id,
+                                "isLocked": False,
+                                "last_name": request.user.last_name,
+                                "level_id": 0,
+                                "network": None,
+                                "referral_code": request.user.referral_code,
+                                "updated_at": request.user.last_login.isoformat() if request.user.last_login else None,
+                                "username": request.user.username,
+                                "wallet": None,
+                            },
+                            "owner_id": request.user.id,
+                            "participants": 0,
+                            "role_created": "USER",
+                            "status": "OPENED",
+                            "time_end": (timezone.now() + timedelta(minutes=30)).isoformat(),
+                            "updated_at": timezone.now().isoformat(),
+                        }
+                    ],
+                    "coin_pouch_id": pouch.id,
+                    "created_at": timezone.now().isoformat(),
+                    "id": pouch.id,
+                    "opener_id": request.user.id,
+                    "owner_id": request.user.id,
+                    "owner_name": f"{request.user.first_name} {request.user.last_name}",
+                    "reward": coin_value,
+                    "sender_id": request.user.id,
+                    "status": "OPENED",
+                    "updated_at": timezone.now().isoformat(),
+                }
+            }
+        }
+        
+        return Response(response_data, status=status.HTTP_200_OK)
 
 
 class GetPouchListInfoView(APIView):
@@ -151,21 +209,7 @@ class GetPouchListInfoView(APIView):
 
 class CreateStakeView(APIView):
     def post(self, request, *args, **kwargs):
-        """
-        API endpoint for creating a stake.
-
-        Parameters:
-        - request: The HTTP request object.
-        - args: Additional positional arguments.
-        - kwargs: Additional keyword arguments.
-
-        Returns:
-        - If the serializer is valid, returns a response with the created stake data and a success message.
-        - If the serializer is not valid, returns a response with the serializer errors and a bad request status.
-
-        Example Usage:
-        response = post(request, *args, **kwargs)
-        """
+        
         data = request.data.copy()
         data['user'] = request.user.id
         duration = data.get('duration', None)
@@ -212,10 +256,37 @@ class GetActiveStakeView(APIView):
         return Response(response_data, status=status.HTTP_200_OK)
 
 
+class ClaimStakeView(APIView):
+    def post(self, request, *args, **kwargs):
+        user_stake = UserStake.objects.get(user=request.user)
+        user_wallet = Wallet.objects.get(user=request.user)
+        current_earning = user_stake.earning
+
+        user_balance = user_wallet.sniff_coin + current_earning
+        user_wallet.sniff_coin = user_balance
+        # user_wallet.save()
+        response_data = {
+            "data": {
+                "claimedEarnings":current_earning,
+                "updatedBalance": user_balance
+            },
+            "message": "Earnings claimed successfully",
+            "status": "SUCCESS",
+            "statusCode": 200
+        }
+        print(response_data)
+        # user_stake.earning = 0
+        # user_stake.last_claim = timezone.now()
+        # user_stake.save()
+        # return Response(response_data, status=status.HTTP_200_OK)
+        return Response({"message": "This feature is not implemented yet."}, status=status.HTTP_501_NOT_IMPLEMENTED)
+
+
 class GetActiveTaskView(APIView):
     def get(self, request, *args, **kwargs):
         active_tasks = Task.objects.filter(task_expired__gt=timezone.now())
         return Response(TaskSerializer(active_tasks, many=True).data, status=status.HTTP_200_OK)
+
 
 class ClaimNewUserAPIView(APIView):
     def post(self, request, *args, **kwargs):

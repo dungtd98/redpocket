@@ -6,7 +6,7 @@ from .models import CustomUser
 class UserAdmin(BaseUserAdmin):
     fieldsets = (
         (None, {'fields': ('username', 'password')}),
-        ('Personal info', {'fields': ('telegram_id', 'daily_limit_open_pouch', 'daily_limit_share_pouch',"referral_code")}),
+        ('Personal info', {'fields': ('telegram_id', 'daily_limit_open_pouch', 'daily_limit_share_pouch',"referral_code",'invited_refcode')}),
         ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
         ('Important dates', {'fields': ('last_login','claim_expire')}),
     )

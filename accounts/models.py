@@ -36,6 +36,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     objects = CustomUserManager()
     claim_expire = models.DateTimeField(blank=True, null=True)
     referral_code = models.CharField(max_length=10, unique=True, blank=True, null=True)
+    invited_refcode = models.CharField(max_length=10, blank=True, null=True)
     
     USERNAME_FIELD = 'username'
     REQUIRED_FIELDS = []

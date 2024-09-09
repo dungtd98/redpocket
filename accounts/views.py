@@ -5,14 +5,84 @@ from rest_framework import status
 from django.contrib.auth import get_user_model
 from wallet.models import Wallet
 from wallet.serializers import WalletSerializer
-from .serializers import TelegramAuthSerializer
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 import urllib.parse
 import json
 from .ultis import count_open_pouch, count_share_pouch
+import hashlib
+import hmac
+
+
 User = get_user_model()
 
 
 class GetUserProfileView(APIView):
+    @swagger_auto_schema(
+        operation_description="Get user profile",
+        responses={
+            200: openapi.Response(
+                description="Successful operation",
+                schema=openapi.Schema(
+                    type="object",
+                    properties={
+                        "status": openapi.Schema(type="string"),
+                        "statusCode": openapi.Schema(type="integer"),
+                        "data": openapi.Schema(
+                            type="object",
+                            properties={
+                                "id": openapi.Schema(type="integer"),
+                                "created_at": openapi.Schema(type="string"),
+                                "updated_at": openapi.Schema(type="string", nullable=True),
+                                "id_telegram": openapi.Schema(type="integer"),
+                                "username": openapi.Schema(type="string"),
+                                "first_name": openapi.Schema(type="string"),
+                                "last_name": openapi.Schema(type="string"),
+                                "balance_sniff_point": openapi.Schema(type="integer"),
+                                "balance_sniff_point_ath": openapi.Schema(type="integer"),
+                                "balance_sniff_coin": openapi.Schema(type="integer"),
+                                "balance_scratch_card": openapi.Schema(type="integer"),
+                                "balance_usdt": openapi.Schema(type="string"),
+                                "trigger_up_level": openapi.Schema(type="boolean"),
+                                "referral_code": openapi.Schema(type="string"),
+                                "wallet": openapi.Schema(type="object", nullable=True),
+                                "network": openapi.Schema(type="object", nullable=True),
+                                "age_wallet": openapi.Schema(type="object", nullable=True),
+                                "age_telegram": openapi.Schema(type="object", nullable=True),
+                                "level_id_old": openapi.Schema(type="integer"),
+                                "level_id": openapi.Schema(type="integer"),
+                                "claim_expire": openapi.Schema(type="string", nullable=True),
+                                "level": openapi.Schema(
+                                    type="object",
+                                    properties={
+                                        "id": openapi.Schema(type="integer"),
+                                        "created_at": openapi.Schema(type="string"),
+                                        "updated_at": openapi.Schema(type="string"),
+                                        "level_number": openapi.Schema(type="integer"),
+                                        "level_name": openapi.Schema(type="string"),
+                                        "require_balance": openapi.Schema(type="integer"),
+                                        "cost_level_up": openapi.Schema(type="integer"),
+                                        "boost": openapi.Schema(type="integer"),
+                                        "send_envelope": openapi.Schema(type="integer"),
+                                    },
+                                ),
+                                "histories_open_coin_pouchs": openapi.Schema(type="array", items=openapi.Items(type=openapi.TYPE_STRING)),
+                                "histories_send_coin_pouchs": openapi.Schema(type="array", items=openapi.Items(type=openapi.TYPE_STRING)),
+                                "createdCountPouchToday": openapi.Schema(type="integer"),
+                                "openedCountPouchToday": openapi.Schema(type="integer"),
+                                "createdCountPouch": openapi.Schema(type="integer"),
+                                "trigger_up_level_data": openapi.Schema(type="object", nullable=True),
+                                "limitAmountCoinPouchToday": openapi.Schema(type="integer"),
+                                "totalAmountPouchToday": openapi.Schema(type="integer"),
+                            },
+                        ),
+                        "message": openapi.Schema(type="string"),
+                    },
+                ),
+            ),
+        },
+    )
+
     def get(self, request):
         wallet = Wallet.objects.get(user=request.user)
 
@@ -73,27 +143,24 @@ class LeaderBoardView(APIView):
         serializer = WalletSerializer(wallet, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-import hashlib
-import hmac
-import time
 TELEGRAM_BOT_TOKEN = "5882917777:AAEaS1T9NJ64Q0nQ-uEf3-XEmvJeTLAtgeg"
 
 class TelegramLoginAPIView(APIView):
     def post(self, request):
         init_data = request.data.get("initData")
         ref_code = request.data.get("refCode", "none")
-
         # Verify the authenticity of the Telegram initialization data
         if not self.verify_telegram_init_data(init_data, TELEGRAM_BOT_TOKEN):
             return Response({"detail": "Invalid Telegram signature"}, status=status.HTTP_400_BAD_REQUEST)
 
         # Extract parameters from init_data
         params = dict(item.split('=') for item in urllib.parse.unquote(init_data).split('&'))
+
         user_data = json.loads(params['user'])
-
-        # Here you would typically create or get the user based on Telegram user data
         user = self.get_or_create_user(params['user'])
-
+        if ref_code != "none":
+            user.invited_refcode = ref_code
+            user.save()
         # Create a JWT token for the user
         refresh = RefreshToken.for_user(user)
         response_data = {

@@ -10,7 +10,7 @@ from .views import CreateGiveawayPouchView
 from .models import GiveawayPouch
 from rest_framework import status
 
-
+# v=spf1 include:_spf.google.com include:amazonses.com ~all
 User = get_user_model()
 class CreateGiveawayPouchViewTests(APITestCase):
     def setUp(self):
